@@ -7,7 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.AppDatabase
 import com.example.data.MekanikRepository
 import com.example.ui.MekanikViewModel
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.MekanikAITheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -41,7 +41,7 @@ class ExampleRobolectricTest {
     val viewModel = MekanikViewModel(application, repository)
 
     composeTestRule.setContent {
-      MyApplicationTheme {
+      MekanikAITheme {
         MekanikAppShell(viewModel)
       }
     }
