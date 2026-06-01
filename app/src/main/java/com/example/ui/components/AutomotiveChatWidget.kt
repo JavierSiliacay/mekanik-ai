@@ -5,10 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -22,6 +25,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -172,17 +176,20 @@ fun ChatPanel(viewModel: AutomotiveChatViewModel) {
                     "Diagnose a vehicle issue",
                     "Explain a DTC code",
                     "Maintenance schedule",
-                    "Engine troubleshooting"
+                    "Engine troubleshooting",
+                    "Battery check",
+                    "Tire pressure"
                 )
                 
                 if (messages.size <= 1 && !isThinking) {
-                    Row(
+                    LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(end = 12.dp)
                     ) {
-                        suggestions.forEach { suggestion ->
+                        items(suggestions) { suggestion ->
                             SuggestionChip(suggestion) {
                                 viewModel.sendMessage(suggestion)
                             }
@@ -202,6 +209,15 @@ fun ChatPanel(viewModel: AutomotiveChatViewModel) {
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Ask about your car...", color = MekanikTextSecondary) },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(
+                            onSend = {
+                                if (inputText.isNotBlank()) {
+                                    viewModel.sendMessage(inputText)
+                                    inputText = ""
+                                }
+                            }
+                        ),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = MekanikSurfaceVariant,
                             unfocusedContainerColor = MekanikSurfaceVariant,

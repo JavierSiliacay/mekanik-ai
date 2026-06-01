@@ -25,7 +25,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun MyApplicationTheme(
+fun MekanikAITheme(
     darkTheme: Boolean = true, // Keep it dark by default for the professional cluster look
     dynamicColor: Boolean = false, // Force consistent neon-green brand branding
     content: @Composable () -> Unit

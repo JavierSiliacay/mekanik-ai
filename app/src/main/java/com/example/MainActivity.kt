@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
         val viewModelFactory = MekanikViewModel.Companion.Factory(application, repository)
 
         setContent {
-            MyApplicationTheme {
+            MekanikAITheme {
                 // Jetpack Compose MVVM View Model
                 val viewModel: MekanikViewModel = viewModel(factory = viewModelFactory)
 
