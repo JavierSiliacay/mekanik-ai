@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import com.example.service.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -71,18 +72,6 @@ class MekanikViewModel(
                 }
             }
         }
-        
-        // Auto-initialize preferred local model if downloaded
-        viewModelScope.launch {
-            val savedId = settingsManager.preferredOfflineModelId.value
-            val model = downloadManager.models.value.find { it.id == savedId }
-            if (model != null && model.downloadState == DownloadState.INSTALLED) {
-                val file = java.io.File(application.filesDir, model.fileName)
-                if (file.exists()) {
-                    MediaPipeLlmInferenceService.initialize(application, file.absolutePath)
-                }
-            }
-        }
     }
 
     // Expose all preferences & live monitoring states to Compose views
@@ -114,7 +103,7 @@ class MekanikViewModel(
 
     fun setPreferredOfflineModelId(id: String?) {
         settingsManager.setPreferredOfflineModelId(id)
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val model = downloadManager.models.value.find { it.id == id }
             if (model != null && model.downloadState == DownloadState.INSTALLED) {
                 val file = java.io.File(getApplication<Application>().filesDir, model.fileName)
@@ -146,53 +135,6 @@ class MekanikViewModel(
         downloadManager.verifyModelIntegrity(modelId, onResult)
     }
 
-    // Retained Legacy Variables for backward compatibility with secondary screens
-    private val legacyPrefs = application.getSharedPreferences("mekanik_settings", android.content.Context.MODE_PRIVATE)
-    private val _localModelPath = MutableStateFlow(
-        legacyPrefs.getString("local_model_path", MediaPipeLlmInferenceService.getDefaultModelPath(application)) ?: ""
-    )
-    val localModelPath: StateFlow<String> = _localModelPath.asStateFlow()
-
-    private val _isLocalAiInitialized = MutableStateFlow(MediaPipeLlmInferenceService.isInitialized())
-    val isLocalAiInitialized: StateFlow<Boolean> = _isLocalAiInitialized.asStateFlow()
-
-    private val _localAiInitError = MutableStateFlow<String?>(null)
-    val localAiInitError: StateFlow<String?> = _localAiInitError.asStateFlow()
-
-    private val _localAiLoading = MutableStateFlow(false)
-    val localAiLoading: StateFlow<Boolean> = _localAiLoading.asStateFlow()
-
-    fun tryAutoInitLocalAi() {
-        viewModelScope.launch {
-            val file = java.io.File(getApplication<Application>().filesDir, "gemma-2b-it-cpu-int4.bin")
-            if (file.exists()) {
-                _localAiLoading.value = true
-                val result = MediaPipeLlmInferenceService.initialize(getApplication(), file.absolutePath)
-                _isLocalAiInitialized.value = result.isSuccess
-                _localAiInitError.value = result.exceptionOrNull()?.message
-                _localAiLoading.value = false
-            }
-        }
-    }
-
-    fun saveAndInitializeLocalAi(path: String) {
-        _localModelPath.value = path
-        legacyPrefs.edit().putString("local_model_path", path).apply()
-        
-        viewModelScope.launch {
-            _localAiLoading.value = true
-            val result = MediaPipeLlmInferenceService.initialize(getApplication(), path)
-            _isLocalAiInitialized.value = result.isSuccess
-            _localAiInitError.value = result.exceptionOrNull()?.message
-            _localAiLoading.value = false
-        }
-    }
-
-    fun unloadLocalAi() {
-        MediaPipeLlmInferenceService.close()
-        _isLocalAiInitialized.value = false
-        _localAiInitError.value = null
-    }
 
     fun selectVehicle(vehicle: Vehicle?) {
         _selectedVehicle.value = vehicle
@@ -282,9 +224,7 @@ class MekanikViewModel(
         _aiAnalysisReport.value = null
 
         viewModelScope.launch {
-            // Emulate OBD-II protocol scan cycle: interrogating standard ECU addresses
-            kotlinx.coroutines.delay(2000)
-
+            // Real OBD-II protocol scan cycle: interrogating standard ECU addresses
             val dtcList = obdManager.getActiveTroubleCodes()
             _scannedCodes.value = dtcList
             _isScanning.value = false
@@ -302,7 +242,7 @@ class MekanikViewModel(
                 totalDtcCount = dtcList.size,
                 codesFound = codeString,
                 overview = overview,
-                odometerReading = liveSensorData.value.odometer.takeIf { it > 0 } ?: vehicle.odometer
+                odometerReading = liveSensorData.value.odometer.toInt().takeIf { it > 0 } ?: vehicle.odometer
             )
             val scanId = repository.insertScan(scan)
 
@@ -363,15 +303,11 @@ class MekanikViewModel(
                 totalDtcCount = 0,
                 codesFound = "",
                 overview = "ECU reset initiated. Diagnostic trouble memory cleared.",
-                odometerReading = liveSensorData.value.odometer.takeIf { it > 0 } ?: vehicle.odometer
+                odometerReading = liveSensorData.value.odometer.toInt().takeIf { it > 0 } ?: vehicle.odometer
             )
             repository.insertScan(scan)
             refreshVehicleHistory(vehicle.id)
         }
-    }
-
-    fun triggerSimulatedEngineFault(code: String) {
-        obdManager.triggerSimulatedFault(code)
     }
 
     /**

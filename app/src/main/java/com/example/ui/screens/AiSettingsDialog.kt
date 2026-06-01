@@ -445,6 +445,7 @@ fun AiSettingsDialog(
                                                     DownloadState.PAUSED -> Color.Gray.copy(alpha = 0.15f)
                                                     DownloadState.VERIFYING -> MekanikNeonGreen.copy(alpha = 0.3f)
                                                     DownloadState.NOT_INSTALLED -> Color.White.copy(alpha = 0.05f)
+                                                    DownloadState.ERROR -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
                                                 },
                                                 shape = RoundedCornerShape(4.dp)
                                             )
@@ -457,6 +458,7 @@ fun AiSettingsDialog(
                                                 DownloadState.PAUSED -> "PAUSED"
                                                 DownloadState.VERIFYING -> "VERIFYING"
                                                 DownloadState.NOT_INSTALLED -> "NOT DOWNLOADED"
+                                                DownloadState.ERROR -> "ERROR"
                                             },
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Black,
@@ -466,6 +468,7 @@ fun AiSettingsDialog(
                                                 DownloadState.PAUSED -> Color.White
                                                 DownloadState.VERIFYING -> MekanikNeonGreen
                                                 DownloadState.NOT_INSTALLED -> MekanikTextSecondary
+                                                DownloadState.ERROR -> MaterialTheme.colorScheme.error
                                             }
                                         )
                                     }
@@ -559,6 +562,25 @@ fun AiSettingsDialog(
                                                 )
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text("PAUSE", color = Color.Black, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+
+                                        DownloadState.ERROR -> {
+                                            Button(
+                                                onClick = { viewModel.startModelDownload(model.id) },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("retry_download_btn_${model.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Refresh,
+                                                    contentDescription = "Retry",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("RETRY", color = Color.White, fontWeight = FontWeight.Bold)
                                             }
                                         }
 

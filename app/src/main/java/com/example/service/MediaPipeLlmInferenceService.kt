@@ -12,7 +12,8 @@ object MediaPipeLlmInferenceService {
     private var initializedModelPath: String? = null
 
     fun getDefaultModelPath(context: Context): String {
-        return File(context.filesDir, "gemma-2b-it-cpu-int4.bin").absolutePath
+        // Updated to match ModelDownloadManager's production GGUF filename
+        return File(context.filesDir, "gemma-2b-it.Q4_K_M.gguf").absolutePath
     }
 
     fun isInitialized(): Boolean {

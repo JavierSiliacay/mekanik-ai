@@ -3,11 +3,15 @@ package com.example.service
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import kotlin.system.measureTimeMillis
 
 class AIProviderManager(
@@ -33,7 +37,15 @@ class AIProviderManager(
         _apiHealthStatus.value = if (initialInternet) "Healthy" else "Unavailable"
     }
 
-    suspend fun generateAnalysis(prompt: String): String = withContext(Dispatchers.IO) {
+    suspend fun generateAnalysis(prompt: Any): String {
+        var fullResponse = ""
+        generateStreamingAnalysis(prompt).collect { chunk ->
+            fullResponse += chunk
+        }
+        return fullResponse
+    }
+
+    fun generateStreamingAnalysis(prompt: Any): Flow<String> = flow {
         val mode = settingsManager.aiMode.value
         val isInternet = networkMonitor.isInternetAvailable.value
 
@@ -46,72 +58,102 @@ class AIProviderManager(
 
             _onlineConnectionStatus.value = "Online"
             val activeModel = settingsManager.preferredOnlineModel.value
-            val authHeader = "Bearer ${OpenRouterClient.getApiKey()}"
-            val referer = "https://ai.studio/build/mekanik"
-            val title = "Mekanik AI"
 
-            val request = OpenRouterRequest(
+            val messages = if (prompt is List<*>) {
+                listOf(CloudAiMessage(role = "user", content = prompt as List<Any>))
+            } else {
+                listOf(CloudAiMessage(role = "user", content = prompt.toString()))
+            }
+
+            val request = CloudAiRequest(
                 model = activeModel,
-                messages = listOf(
-                    OpenRouterMessage(role = "user", content = prompt)
-                )
+                messages = messages,
+                stream = true
             )
 
-            var responseText: String? = null
-            val timeTaken = measureTimeMillis {
-                try {
-                    val apiResponse = OpenRouterClient.service.generateCompletion(
-                        authorization = authHeader,
-                        referer = referer,
-                        title = title,
-                        request = request
-                    )
-                    responseText = apiResponse.choices?.firstOrNull()?.message?.content
-                    _apiHealthStatus.value = "Healthy"
-                } catch (e: Exception) {
-                    Log.e(TAG, "Cloud API query failed", e)
-                    _apiHealthStatus.value = "Error: ${e.message}"
-                    throw Exception("Cloud API Failed: ${e.message}")
-                }
-            }
-
-            _responseLatency.value = "${timeTaken}ms"
-            return@withContext responseText ?: throw Exception("Empty response received from Cloud API.")
-
-        } else {
-            // OFFLINE MODE
-            // Attempt to initialize preferred model if not initialized
-            val selectedId = settingsManager.preferredOfflineModelId.value ?: "gemma-2b"
-            val modelFileName = getFileNameForModelId(selectedId)
-            val file = File(context.filesDir, modelFileName)
-
-            if (!file.exists()) {
-                throw Exception("Local model data missing. Please download an offline model in Settings.")
-            }
-
-            // Lazy initialize / reload if paths differ
-            if (MediaPipeLlmInferenceService.getInitializedPath() != file.absolutePath) {
-                val initResult = MediaPipeLlmInferenceService.initialize(context, file.absolutePath)
-                if (initResult.isFailure) {
-                    throw Exception("Failed to bind local device buffers: ${initResult.exceptionOrNull()?.message}")
-                }
-            }
+            val okHttpClient = CloudAiClient.getOkHttpClient()
+            val okHttpRequest = CloudAiClient.createStreamRequest(request)
+            val moshi = CloudAiClient.getMoshi()
+            val responseAdapter = moshi.adapter(CloudAiResponse::class.java)
 
             val startMillis = System.currentTimeMillis()
-            val text = MediaPipeLlmInferenceService.generateText(prompt)
-            val stopMillis = System.currentTimeMillis()
-            _responseLatency.value = "${stopMillis - startMillis}ms"
+            
+            try {
+                okHttpClient.newCall(okHttpRequest).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string() ?: "Unknown error"
+                        throw IOException("Cloud API error ${response.code}: $errorBody")
+                    }
 
-            return@withContext text
+                    val reader = response.body?.source() ?: throw IOException("Empty response body")
+                    
+                    while (!reader.exhausted()) {
+                        val line = reader.readUtf8Line() ?: break
+                        if (line.startsWith("data: ")) {
+                            val data = line.substring(6).trim()
+                            if (data == "[DONE]") break
+                            
+                            try {
+                                val chunk = responseAdapter.fromJson(data)
+                                val content = chunk?.choices?.firstOrNull()?.delta?.content as? String
+                                if (content != null) {
+                                    emit(content)
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error parsing stream chunk: $data", e)
+                            }
+                        }
+                    }
+                    _apiHealthStatus.value = "Healthy"
+                    _responseLatency.value = "${System.currentTimeMillis() - startMillis}ms"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Cloud streaming query failed", e)
+                _apiHealthStatus.value = "Error: ${e.message}"
+                throw e
+            }
+        } else {
+            // OFFLINE MODE (Streaming support for MediaPipe could be added later)
+            val textPrompt = if (prompt is String) prompt else {
+                // Fallback: extract text from multimodal list if possible
+                (prompt as? List<*>)?.filterIsInstance<CloudAiContent>()?.firstOrNull { it.type == "text" }?.text ?: prompt.toString()
+            }
+            val result = generateAnalysisSync(textPrompt)
+            emit(result)
         }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun generateAnalysisSync(prompt: String): String = withContext(Dispatchers.IO) {
+        // Attempt to initialize preferred model if not initialized
+        val selectedId = settingsManager.preferredOfflineModelId.value ?: "gemma-2b-gguf"
+        val modelFileName = getFileNameForModelId(selectedId)
+        val file = File(context.filesDir, modelFileName)
+
+        if (!file.exists()) {
+            throw Exception("Local model data missing. Please download an offline model in Settings.")
+        }
+
+        // Lazy initialize / reload if paths differ
+        if (MediaPipeLlmInferenceService.getInitializedPath() != file.absolutePath) {
+            val initResult = MediaPipeLlmInferenceService.initialize(context, file.absolutePath)
+            if (initResult.isFailure) {
+                throw Exception("Failed to bind local device buffers: ${initResult.exceptionOrNull()?.message}")
+            }
+        }
+
+        val startMillis = System.currentTimeMillis()
+        val text = MediaPipeLlmInferenceService.generateText(prompt)
+        val stopMillis = System.currentTimeMillis()
+        _responseLatency.value = "${stopMillis - startMillis}ms"
+
+        return@withContext text
     }
 
     private fun getFileNameForModelId(id: String): String {
         return when (id) {
-            "gemma-2b" -> "gemma-2b-it-cpu-int4.bin"
-            "llama-3.2" -> "llama-3.2-1b-it-cpu-int4.bin"
-            "phi-3-mini" -> "phi-3-mini-4k-instruct-cpu-int4.bin"
-            else -> "gemma-2b-it-cpu-int4.bin"
+            "gemma-2b-gguf" -> "gemma-2b-it.Q4_K_M.gguf"
+            "youtu-2b" -> "Youtu-LLM-2B-Q8_0.gguf"
+            else -> "gemma-2b-it.Q4_K_M.gguf"
         }
     }
 }

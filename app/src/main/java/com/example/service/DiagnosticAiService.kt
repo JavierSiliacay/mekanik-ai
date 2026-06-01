@@ -18,6 +18,8 @@ class DiagnosticAiAdvisor(private val obdBluetoothManager: ObdBluetoothManager) 
             - Coolant Temperature: ${sensorSnapshot.coolantTemp} °C
             - Fuel Level: ${sensorSnapshot.fuelLevel} %
             - Intake Air Temperature: ${sensorSnapshot.intakeAirTemp} °C
+            - Intake Manifold Pressure: ${sensorSnapshot.intakeManifoldPressure} kPa
+            - Timing Advance: ${sensorSnapshot.timingAdvance} °
             - Battery Voltage: ${sensorSnapshot.batteryVoltage} V
             - Engine Load: ${sensorSnapshot.engineLoad} %
             - Air Flow Rate (MAF): ${sensorSnapshot.massAirFlow} g/s
@@ -47,27 +49,26 @@ class DiagnosticAiAdvisor(private val obdBluetoothManager: ObdBluetoothManager) 
             return@withContext "No diagnostic trouble codes detected. Your vehicle system reporting parameters are healthy."
         }
 
-        val localReport = buildLocalAnalysis(vehicleName, dtcCodes, sensorSnapshot)
-        val prompt = buildPrompt(vehicleName, dtcCodes, sensorSnapshot)
+            val localReport = buildLocalAnalysis(vehicleName, dtcCodes, sensorSnapshot)
+            val prompt = buildPrompt(vehicleName, dtcCodes, sensorSnapshot)
 
-        try {
-            val response = aiProviderManager.generateAnalysis(prompt)
-            val headerText = if (aiProviderManager.settingsManager.aiMode.value == AiMode.ONLINE) {
-                "🤖 [ONLINE CLOUD AI]\n\nModel: Cloud Analysis Engine\n\n"
-            } else {
-                val modelName = when(aiProviderManager.settingsManager.preferredOfflineModelId.value) {
-                    "gemma-2b" -> "Gemma 2B"
-                    "llama-3.2" -> "Llama 3.2"
-                    "phi-3-mini" -> "Phi-3 Mini"
-                    else -> "Local Model"
+            try {
+                val response = aiProviderManager.generateAnalysis(prompt)
+                val headerText = if (aiProviderManager.settingsManager.aiMode.value == AiMode.ONLINE) {
+                    "🤖 [ONLINE CLOUD AI]\n\nModel: Cloud Analysis Engine\n\n"
+                } else {
+                    val modelName = when(aiProviderManager.settingsManager.preferredOfflineModelId.value) {
+                        "gemma-2b-gguf" -> "Gemma 2B IT (GGUF)"
+                        "youtu-2b" -> "Youtu-LLM 2B (GGUF)"
+                        else -> "Local Model"
+                    }
+                    "🤖 [OFFLINE LOCAL AI]\n\nModel: $modelName\n\n"
                 }
-                "🤖 [OFFLINE LOCAL AI]\n\nModel: $modelName\n\n"
+                headerText + response
+            } catch (e: Exception) {
+                Log.e("DiagnosticAi", "AI Generation Error: ${e.message}", e)
+                "⚠️ AI Generation Unsuccessful: ${e.message}\n\n🤖 [OFFLINE DICTIONARY FALLBACK]\n\n$localReport"
             }
-            headerText + response
-        } catch (e: Exception) {
-            Log.e("DiagnosticAi", "AI Generation Error: ${e.message}", e)
-            "⚠️ AI Generation Unsuccessful: ${e.message}\n\n🤖 [OFFLINE DICTIONARY FALLBACK]\n\n$localReport"
-        }
     }
 
     private fun buildLocalAnalysis(vehicleName: String, dtcCodes: List<String>, sensorSnapshot: ObdSensorData): String {
@@ -76,7 +77,7 @@ class DiagnosticAiAdvisor(private val obdBluetoothManager: ObdBluetoothManager) 
         sb.append("-----------------------------------------------------------------\n\n")
 
         for (code in dtcCodes) {
-            val detail = obdBluetoothManager.dtdDictionary[code]
+            val detail = obdBluetoothManager.dtcDictionary[code]
             if (detail != null) {
                 sb.append("🔍 Trouble Code: **${detail.code}**\n")
                 sb.append("👉 Issue: **${detail.description}**\n")

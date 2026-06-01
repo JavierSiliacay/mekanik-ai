@@ -1174,6 +1174,60 @@ fun DashboardScreen(
                 )
             }
 
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricBentoCard(
+                    label = "Intake Temp",
+                    value = String.format(Locale.US, "%.0f", liveData.intakeAirTemp),
+                    unit = "°C",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricBentoCard(
+                    label = "Fuel Level",
+                    value = String.format(Locale.US, "%.0f", liveData.fuelLevel),
+                    unit = "%",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricBentoCard(
+                    label = "ST Fuel Trim",
+                    value = String.format(Locale.US, "%.1f", liveData.shortTermFuelTrim),
+                    unit = "%",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricBentoCard(
+                    label = "LT Fuel Trim",
+                    value = String.format(Locale.US, "%.1f", liveData.longTermFuelTrim),
+                    unit = "%",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricBentoCard(
+                    label = "Intake Pressure",
+                    value = String.format(Locale.US, "%.0f", liveData.intakeManifoldPressure),
+                    unit = "kPa",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricBentoCard(
+                    label = "Timing Advance",
+                    value = String.format(Locale.US, "%.1f", liveData.timingAdvance),
+                    unit = "°",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
             // 3. AI Diagnostic Insight Card
@@ -1541,58 +1595,6 @@ fun ScannerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // On-device AI localized settings
-        OnDeviceAiSettingsCard(viewModel)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Intercept fault injector (Demo injector triggers codes)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MekanikSurface),
-            border = BorderStroke(1.dp, MekanikDarkGreen.copy(alpha = 0.5f))
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = "EMULATE SYSTEM FAULT INJECTOR (Demo Mode)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MekanikTextSecondary,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val faultsList = listOf(
-                        "P0301" to "Cylinder 1 Misfire",
-                        "P0171" to "System Too Lean",
-                        "P0420" to "Cat Catalyst Weakness",
-                        "P0115" to "Coolant Sensor Fail",
-                        "P0500" to "VSS Malfunction"
-                    )
-
-                    faultsList.forEach { pair ->
-                        Card(
-                            modifier = Modifier
-                                .clickable {
-                                    viewModel.triggerSimulatedEngineFault(pair.first)
-                                }
-                                .testTag("inject_${pair.first}"),
-                            colors = CardDefaults.cardColors(containerColor = MekanikSurfaceVariant),
-                            border = BorderStroke(1.dp, MekanikDimGreen)
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text(pair.first, color = MekanikNeonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text(pair.second, color = MekanikTextPrimary, fontSize = 10.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
 
         // Scan Results
         Text(
@@ -1951,153 +1953,3 @@ fun HistoryScreen(
     }
 }
 
-@Composable
-fun OnDeviceAiSettingsCard(
-    viewModel: MekanikViewModel,
-    modifier: Modifier = Modifier
-) {
-    val modelPath by viewModel.localModelPath.collectAsState()
-    val isInitialized by viewModel.isLocalAiInitialized.collectAsState()
-    val initError by viewModel.localAiInitError.collectAsState()
-    val isLoading by viewModel.localAiLoading.collectAsState()
-
-    var tempPath by remember(modelPath) { mutableStateOf(modelPath) }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MekanikSurface),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(if (isInitialized) MekanikNeonGreen else Color.Gray, RoundedCornerShape(6.dp))
-                        .padding(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Memory,
-                        contentDescription = "Local AI",
-                        tint = Color.Black,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Text(
-                    text = "ON-DEVICE AI (GENERIC)",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = if (isInitialized) MekanikNeonGreen else Color.White
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = "On-device GenAI allows running optimized LLMs (Gemma, Llama, Phi) directly on your mobile device hardware entirely offline. Follow official guides to transfer model binaries (.bin) to your device standard directories.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MekanikTextSecondary
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Text field for model path setting
-            OutlinedTextField(
-                value = tempPath,
-                onValueChange = { tempPath = it },
-                label = { Text("Local Model Path (.bin or .task)") },
-                placeholder = { Text("/data/local/tmp/llm/model.bin") },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MekanikNeonGreen,
-                    unfocusedBorderColor = MekanikDimGreen,
-                    focusedLabelColor = MekanikNeonGreen,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                modifier = Modifier.fillMaxWidth().testTag("on_device_path_input")
-            )
-
-            if (initError != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Error: $initError",
-                    color = MekanikErrorRed,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Button(
-                    onClick = { viewModel.saveAndInitializeLocalAi(tempPath) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MekanikNeonGreen),
-                    enabled = !isLoading && tempPath.isNotBlank(),
-                    modifier = Modifier.weight(1f).testTag("load_local_model_btn")
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
-                    } else {
-                        Text(if (isInitialized) "RELOAD MODEL" else "INITIALIZE MODEL", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                if (isInitialized) {
-                    Button(
-                        onClick = { viewModel.unloadLocalAi() },
-                        colors = ButtonDefaults.buttonColors(containerColor = MekanikErrorRed.copy(alpha = 0.8f)),
-                        modifier = Modifier.weight(1f).testTag("unload_local_model_btn")
-                    ) {
-                        Text("UNLOAD", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Instructions details info
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MekanikSurfaceVariant),
-                border = BorderStroke(1.dp, MekanikDimGreen.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Steps",
-                            tint = MekanikNeonGreen,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "How to load a model (.bin):",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MekanikNeonGreen
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "1. Download optimized or compatible on-device model binaries.\n" +
-                               "2. Push the file to your physical phone or emulator storage via command:\n" +
-                               "   adb push command:\n" +
-                               "   adb push model.bin /data/local/tmp/model.bin\n" +
-                               "3. Enter the path above and tap 'INITIALIZE MODEL' to bind On-Device AI.",
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = MekanikTextSecondary,
-                            lineHeight = 14.sp
-                        )
-                    )
-                }
-            }
-        }
-    }
-}

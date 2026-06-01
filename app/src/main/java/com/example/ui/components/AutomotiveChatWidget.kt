@@ -1,12 +1,24 @@
 package com.example.ui.components
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items as itemsGrid
+import androidx.core.content.FileProvider
+import android.net.Uri
+import android.os.Environment
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,7 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -31,10 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import com.example.ui.AutomotiveChatViewModel
 import com.example.ui.ChatMessage
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
+import java.io.File
 import kotlin.math.roundToInt
 
 @Composable
@@ -57,15 +73,19 @@ fun AutomotiveChatWidget(viewModel: AutomotiveChatViewModel) {
                     )
                 }
                 .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        val newX = (viewModel.posX * screenWidthPx + dragAmount.x) / screenWidthPx
-                        val newY = (viewModel.posY * screenHeightPx + dragAmount.y) / screenHeightPx
-                        viewModel.updatePosition(
-                            newX.coerceIn(0f, 0.9f),
-                            newY.coerceIn(0f, 0.9f)
-                        )
-                    }
+                    detectDragGestures(
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            val newX = (viewModel.posX * screenWidthPx + dragAmount.x) / screenWidthPx
+                            val newY = (viewModel.posY * screenHeightPx + dragAmount.y) / screenHeightPx
+                            viewModel.updatePosition(
+                                newX.coerceIn(0f, 0.9f),
+                                newY.coerceIn(0f, 0.9f)
+                            )
+                        },
+                        onDragEnd = { viewModel.savePosition() },
+                        onDragCancel = { viewModel.savePosition() }
+                    )
                 }
         ) {
             FloatingActionButton(
@@ -94,8 +114,39 @@ fun AutomotiveChatWidget(viewModel: AutomotiveChatViewModel) {
 fun ChatPanel(viewModel: AutomotiveChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val isThinking by viewModel.isAiThinking.collectAsState()
+    val selectedImageUris by viewModel.selectedImageUris.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+
+    fun createImageFile(): File {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        return File.createTempFile("JPEG_${timeStamp}_", ".jpg", storageDir).apply {
+            photoUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                this
+            )
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoUri != null) {
+            viewModel.onImagesSelected(listOf(photoUri.toString()))
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        viewModel.onImagesSelected(uris.map { it.toString() })
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -171,6 +222,45 @@ fun ChatPanel(viewModel: AutomotiveChatViewModel) {
                     }
                 }
 
+                // Selected Images Preview
+                if (selectedImageUris.isNotEmpty()) {
+                    LazyHorizontalGrid(
+                        rows = GridCells.Fixed(1),
+                        modifier = Modifier
+                            .height(110.dp)
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsGrid(selectedImageUris) { uri ->
+                            Box {
+                                AsyncImage(
+                                    model = uri,
+                                    contentDescription = "Selected Image",
+                                    modifier = Modifier
+                                        .size(100.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(1.dp, MekanikNeonGreen, RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                                IconButton(
+                                    onClick = { viewModel.removeImage(uri) },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(24.dp)
+                                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Remove Image",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Suggestions
                 val suggestions = listOf(
                     "Diagnose a vehicle issue",
@@ -204,6 +294,16 @@ fun ChatPanel(viewModel: AutomotiveChatViewModel) {
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(onClick = { galleryLauncher.launch("image/*") }) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = "Gallery", tint = MekanikNeonGreen)
+                    }
+                    IconButton(onClick = {
+                        val file = createImageFile()
+                        cameraLauncher.launch(photoUri!!)
+                    }) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = "Camera", tint = MekanikNeonGreen)
+                    }
+                    
                     TextField(
                         value = inputText,
                         onValueChange = { inputText = it },
@@ -212,7 +312,7 @@ fun ChatPanel(viewModel: AutomotiveChatViewModel) {
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(
                             onSend = {
-                                if (inputText.isNotBlank()) {
+                                if (inputText.isNotBlank() || selectedImageUris.isNotEmpty()) {
                                     viewModel.sendMessage(inputText)
                                     inputText = ""
                                 }
@@ -232,7 +332,7 @@ fun ChatPanel(viewModel: AutomotiveChatViewModel) {
                     Spacer(modifier = Modifier.width(8.dp))
                     FloatingActionButton(
                         onClick = {
-                            if (inputText.isNotBlank()) {
+                            if (inputText.isNotBlank() || selectedImageUris.isNotEmpty()) {
                                 viewModel.sendMessage(inputText)
                                 inputText = ""
                             }
@@ -268,12 +368,27 @@ fun ChatMessageBubble(message: ChatMessage) {
                 shape = shape,
                 modifier = Modifier.widthIn(max = 280.dp)
             ) {
-                Text(
-                    text = message.content,
-                    modifier = Modifier.padding(12.dp),
-                    color = textColor,
-                    fontSize = 14.sp
-                )
+                Column {
+                    if (message.imageUri != null) {
+                        AsyncImage(
+                            model = message.imageUri,
+                            contentDescription = "User attached image",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .clip(RoundedCornerShape(12.dp, 12.dp, 0.dp, 0.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    if (message.content.isNotEmpty()) {
+                        Text(
+                            text = message.content,
+                            modifier = Modifier.padding(12.dp),
+                            color = textColor,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             }
             Text(
                 text = if (message.isUser) "You" else "Mekanik AI",

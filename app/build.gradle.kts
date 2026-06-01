@@ -18,6 +18,10 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    
+    // Default model if not in .env
+    buildConfigField("String", "HF_API_KEY", "\"\"")
+    buildConfigField("String", "HF_MODEL", "\"google/gemma-4-31B-it:fastest\"")
   }
 
   signingConfigs {
@@ -87,7 +91,7 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
-  // implementation(libs.coil.compose)
+  implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
   implementation(libs.kotlinx.coroutines.android)

@@ -20,12 +20,12 @@ class SettingsManager(private val context: Context) {
     val aiMode: StateFlow<AiMode> = _aiMode.asStateFlow()
 
     private val _preferredOnlineModel = MutableStateFlow(
-        prefs.getString("preferred_online_model", BuildConfig.OPENROUTER_MODEL) ?: BuildConfig.OPENROUTER_MODEL
+        prefs.getString("preferred_online_model", BuildConfig.HF_MODEL) ?: BuildConfig.HF_MODEL
     )
     val preferredOnlineModel: StateFlow<String> = _preferredOnlineModel.asStateFlow()
 
     private val _preferredOfflineModelId = MutableStateFlow<String?>(
-        prefs.getString("preferred_offline_model_id", "gemma-2b") ?: "gemma-2b"
+        prefs.getString("preferred_offline_model_id", "gemma-2b-gguf") ?: "gemma-2b-gguf"
     )
     val preferredOfflineModelId: StateFlow<String?> = _preferredOfflineModelId.asStateFlow()
 
