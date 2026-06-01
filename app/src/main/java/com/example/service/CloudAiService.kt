@@ -25,8 +25,8 @@ data class CloudAiContent(
 data class CloudAiImageUrl(val url: String)
 
 data class CloudAiMessage(
-    val role: String,
-    val content: Any // Can be String or List<CloudAiContent>
+    val role: String? = null,
+    val content: Any? = null // Can be String or List<CloudAiContent>
 )
 
 data class CloudAiRequest(

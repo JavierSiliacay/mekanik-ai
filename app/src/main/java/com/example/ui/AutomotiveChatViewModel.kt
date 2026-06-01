@@ -126,7 +126,8 @@ class AutomotiveChatViewModel(
     val selectedImageUris: StateFlow<List<String>> = _selectedImageUris.asStateFlow()
 
     fun onImagesSelected(uris: List<String>) {
-        _selectedImageUris.value = (_selectedImageUris.value + uris).distinct()
+        val validUris = uris.filter { it.isNotBlank() }
+        _selectedImageUris.value = (_selectedImageUris.value + validUris).distinct()
     }
 
     fun removeImage(uri: String) {
@@ -169,12 +170,13 @@ class AutomotiveChatViewModel(
     }
 
     fun sendMessage(text: String, imageUris: List<String> = _selectedImageUris.value) {
-        if (text.isBlank() && imageUris.isEmpty()) return
+        val filteredUris = imageUris.filter { it.isNotBlank() }
+        if (text.isBlank() && filteredUris.isEmpty()) return
 
         val userMessage = ChatMessage(
             content = text,
             isUser = true,
-            imageUri = imageUris.firstOrNull() // For display in bubble, we'll just show the first one or we can update bubble
+            imageUri = filteredUris.firstOrNull()
         )
         _messages.value = _messages.value + userMessage
         _selectedImageUris.value = emptyList() // Clear after sending
@@ -183,7 +185,7 @@ class AutomotiveChatViewModel(
             _isAiThinking.value = true
             
             val aiMessageIndex = _messages.value.size
-            _messages.value = _messages.value + ChatMessage(content = "", isUser = false)
+            _messages.value = _messages.value + ChatMessage(content = "...", isUser = false)
             
             try {
                 val contentList = mutableListOf<com.example.service.CloudAiContent>()
@@ -192,7 +194,7 @@ class AutomotiveChatViewModel(
                     contentList.add(com.example.service.CloudAiContent(type = "text", text = text))
                 }
 
-                imageUris.forEach { uri ->
+                filteredUris.forEach { uri ->
                     val base64 = uriToBase64(uri)
                     if (base64 != null) {
                         contentList.add(
@@ -204,16 +206,22 @@ class AutomotiveChatViewModel(
                     }
                 }
 
-                val promptPayload: Any = if (contentList.size > 1 || (contentList.size == 1 && contentList[0].type == "image_url")) {
-                    // Prepend system prompt as a text item
+                if (contentList.isEmpty()) {
+                    throw Exception("Could not process message. Please provide text or a valid image.")
+                }
+
+                val promptPayload: Any = if (contentList.any { it.type == "image_url" }) {
+                    // Prepend system prompt for multimodal context
                     listOf(com.example.service.CloudAiContent(type = "text", text = systemPrompt)) + contentList
                 } else {
                     "$systemPrompt\n\nUser: $text\nAssistant:"
                 }
 
                 var accumulatedResponse = ""
+                var receivedAnyChunk = false
                 
                 aiProviderManager.generateStreamingAnalysis(promptPayload).collect { chunk ->
+                    receivedAnyChunk = true
                     accumulatedResponse += chunk
                     
                     val sanitized = withContext(Dispatchers.Default) {
@@ -230,8 +238,21 @@ class AutomotiveChatViewModel(
                         }
                     }
                 }
+                
+                if (!receivedAnyChunk) {
+                    throw Exception("No response received from AI.")
+                }
             } catch (e: Exception) {
-                // error handling...
+                android.util.Log.e("AutomotiveChatViewModel", "Error sending message", e)
+                withContext(Dispatchers.Main) {
+                    val currentMessages = _messages.value.toMutableList()
+                    if (aiMessageIndex < currentMessages.size) {
+                        currentMessages[aiMessageIndex] = currentMessages[aiMessageIndex].copy(
+                            content = "Error: ${e.localizedMessage ?: "Unknown error occurred"}"
+                        )
+                        _messages.value = currentMessages
+                    }
+                }
             } finally {
                 _isAiThinking.value = false
             }
@@ -245,6 +266,7 @@ class AutomotiveChatViewModel(
                 isUser = false
             )
         )
+        _selectedImageUris.value = emptyList()
     }
 
     companion object {

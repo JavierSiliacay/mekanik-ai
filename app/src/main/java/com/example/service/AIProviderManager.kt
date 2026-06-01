@@ -114,11 +114,24 @@ class AIProviderManager(
             }
         } else {
             // OFFLINE MODE (Streaming support for MediaPipe could be added later)
-            val textPrompt = if (prompt is String) prompt else {
-                // Fallback: extract text from multimodal list if possible
-                (prompt as? List<*>)?.filterIsInstance<CloudAiContent>()?.firstOrNull { it.type == "text" }?.text ?: prompt.toString()
+            val textPrompt = when (prompt) {
+                is String -> prompt
+                is List<*> -> {
+                    prompt.filterIsInstance<CloudAiContent>()
+                        .mapNotNull { it.text }
+                        .joinToString("\n\n")
+                }
+                else -> prompt.toString()
             }
+            
+            if (textPrompt.isBlank()) {
+                throw Exception("Offline AI requires text input.")
+            }
+
             val result = generateAnalysisSync(textPrompt)
+            if (result.isBlank()) {
+                throw Exception("Offline AI generated an empty response.")
+            }
             emit(result)
         }
     }.flowOn(Dispatchers.IO)

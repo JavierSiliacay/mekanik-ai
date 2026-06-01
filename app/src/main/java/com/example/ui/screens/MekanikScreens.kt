@@ -1097,7 +1097,7 @@ fun DashboardScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Attach your ELM327 Bluetooth key into your car's OBD port, click 'Connect', then select our simulated virtual adapter or any real visible hardware in range.",
+                        text = "Insert the ELM327 Bluetooth adapter into the OBD-II port, then tap ‘Connect’ and choose your ELM327 device from the Bluetooth list.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MekanikTextSecondary,
                         textAlign = TextAlign.Center
@@ -1345,7 +1345,7 @@ fun OBDConnectorDialog(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Confirm paired ELM327 key devices or pick our built-in simulator engine for a detailed demonstration session.",
+                    text = "Ensure the ELM327 device is properly paired and establish a stable connection with the vehicle’s ECU.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MekanikTextSecondary
                 )
@@ -1473,11 +1473,13 @@ fun ScannerScreen(
                     )
                 }
 
-                Card(colors = CardDefaults.cardColors(containerColor = MekanikDarkGreen)) {
+                Card(colors = CardDefaults.cardColors(
+                    containerColor = if (connectionStatus == ConnectionStatus.CONNECTED) MekanikDarkGreen else Color.DarkGray
+                )) {
                     Text(
-                        text = "ECU CONNECTED",
+                        text = if (connectionStatus == ConnectionStatus.CONNECTED) "ECU CONNECTED" else "OFFLINE",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MekanikNeonGreen,
+                        color = if (connectionStatus == ConnectionStatus.CONNECTED) MekanikNeonGreen else Color.LightGray,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
