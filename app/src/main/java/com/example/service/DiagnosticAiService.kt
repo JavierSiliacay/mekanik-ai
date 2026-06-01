@@ -58,8 +58,9 @@ class DiagnosticAiAdvisor(private val obdBluetoothManager: ObdBluetoothManager) 
                     "🤖 [ONLINE CLOUD AI]\n\nModel: Cloud Analysis Engine\n\n"
                 } else {
                     val modelName = when(aiProviderManager.settingsManager.preferredOfflineModelId.value) {
-                        "gemma-2b-gguf" -> "Gemma 2B IT (GGUF)"
-                        "youtu-2b" -> "Youtu-LLM 2B (GGUF)"
+                        "llama-3.2-1b" -> "Llama 3.2 1B (GGUF)"
+                        "smollm2-1.7b" -> "SmolLM2 1.7B (GGUF)"
+                        "qwen2.5-1.5b" -> "Qwen 2.5 1.5B (GGUF)"
                         else -> "Local Model"
                     }
                     "🤖 [OFFLINE LOCAL AI]\n\nModel: $modelName\n\n"

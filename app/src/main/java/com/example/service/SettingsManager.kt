@@ -25,7 +25,7 @@ class SettingsManager(private val context: Context) {
     val preferredOnlineModel: StateFlow<String> = _preferredOnlineModel.asStateFlow()
 
     private val _preferredOfflineModelId = MutableStateFlow<String?>(
-        prefs.getString("preferred_offline_model_id", "gemma-2b-gguf") ?: "gemma-2b-gguf"
+        prefs.getString("preferred_offline_model_id", "llama-3.2-1b") ?: "llama-3.2-1b"
     )
     val preferredOfflineModelId: StateFlow<String?> = _preferredOfflineModelId.asStateFlow()
 

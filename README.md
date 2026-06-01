@@ -4,7 +4,7 @@ Mekanik AI is a cutting-edge Android application designed to provide intelligent
 
 ## 🚀 Features
 
-- **Hybrid AI Engine:** Seamlessly utilizes `Google Gemma` for online high-fidelity reasoning and `Google Gemma GGUF` (via MediaPipe) for privacy-focused offline assistance.
+- **Hybrid AI Engine:** Seamlessly utilizes `Google Gemma` for online high-fidelity reasoning and lightweight models like `Llama 3.2 1B` (via MediaPipe) for privacy-focused offline assistance.
 - **Real-time Streaming Responses:** Experience near-instant feedback with word-by-word streaming using Server-Sent Events (SSE), optimized with `Flow` for zero UI stutter.
 - **Advanced Multimodal Support:** Upload images of your vehicle's engine, dashboard, or specific parts. High-resolution images are processed using suspend-based Base64 encoding to prevent memory pressure.
 - **Performance-First Architecture:** Engineered to keep the Main Thread clear. Heavy operations like model loading, image processing, and complex Regex sanitization are offloaded to `Dispatchers.IO` and `Dispatchers.Default`.
@@ -42,7 +42,7 @@ Since Mekanik AI follows a **Real-World Only** policy, the app provides real too
 #### Method in Offline Mode: Direct In-App Download (Easiest)
 1. Open **AI Configuration** in the app.
 2. Scroll to **Offline Model Management**.
-3. Tap **DOWNLOAD** on your preferred model (**Youtu-LLM 2B** or **Google Gemma 2B**).
+3. Tap **DOWNLOAD** on your preferred model (**Llama 3.2 1B**, **SmolLM2 1.7B**, or **Qwen 2.5 1.5B**).
 4. The app will fetch the real binary directly from Hugging Face and install it automatically.
 
 
@@ -51,7 +51,7 @@ Since Mekanik AI follows a **Real-World Only** policy, the app provides real too
 - **Language:** Kotlin
 - **UI Framework:** Jetpack Compose
 - **Concurrency:** Kotlin Coroutines & Flow (Strict Threading Policy)
-- **AI Integration:** Google Gemma (Hugging Face Router & MediaPipe LLM Inference)
+- **AI Integration:** Google Gemma (Hugging Face Router) & MediaPipe LLM Inference (Llama 3.2, SmolLM2, Qwen 2.5)
 - **Image Loading:** Coil
 - **Networking:** Retrofit, OkHttp, SSE
 - **Database:** Room (for chat history)

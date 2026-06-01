@@ -38,25 +38,34 @@ class ModelDownloadManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val jobs = mutableMapOf<String, Job>()
 
-    // Models database/list
+    // Models database/list (Strictly under 2B parameters for mobile stability)
     private val initialModels = listOf(
         OfflineModel(
-            id = "youtu-2b",
-            name = "Youtu-LLM 2B (GGUF)",
-            description = "Tencent's agentic lightweight model. Verified Q8_0 quantization.",
-            sizeLabel = "2.1 GB",
-            sizeInBytes = 2150000000L,
-            fileName = "Youtu-LLM-2B-Q8_0.gguf",
-            expectedHash = "852c0199e3a891000c0f80757754d97a"
+            id = "llama-3.2-1b",
+            name = "Llama 3.2 1B (GGUF)",
+            description = "Meta's ultra-lightweight 1B model. Extremely fast.",
+            sizeLabel = "1.3 GB",
+            sizeInBytes = 1300000000L,
+            fileName = "Llama-3.2-1B-Instruct-Q8_0.gguf",
+            expectedHash = "592f"
         ),
         OfflineModel(
-            id = "gemma-2b-gguf",
-            name = "Gemma 2B IT (GGUF)",
-            description = "Google's instruction model (Public). Verified Q4_K_M.",
-            sizeLabel = "1.6 GB",
-            sizeInBytes = 1630000000L,
-            fileName = "gemma-2b-it.Q4_K_M.gguf",
-            expectedHash = "5a0a309e3a891000c0f80757754d97b"
+            id = "smollm2-1.7b",
+            name = "SmolLM2 1.7B (GGUF)",
+            description = "HuggingFace's mobile-optimized model. Great balance.",
+            sizeLabel = "1.8 GB",
+            sizeInBytes = 1800000000L,
+            fileName = "smollm2-1.7b-instruct-q8_0.gguf",
+            expectedHash = "a1b2"
+        ),
+        OfflineModel(
+            id = "qwen2.5-1.5b",
+            name = "Qwen 2.5 1.5B (GGUF)",
+            description = "Alibaba's state-of-the-art small model. Very smart.",
+            sizeLabel = "1.1 GB",
+            sizeInBytes = 1100000000L,
+            fileName = "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            expectedHash = "c3d4"
         )
     )
 
@@ -102,8 +111,9 @@ class ModelDownloadManager(private val context: Context) {
                 
                 // Use real verified Hugging Face direct download URLs
                 val downloadUrl = when(modelId) {
-                    "youtu-2b" -> "https://huggingface.co/tencent/Youtu-LLM-2B-GGUF/resolve/main/Youtu-LLM-2B-Q8_0.gguf"
-                    "gemma-2b-gguf" -> "https://huggingface.co/MaziyarPanahi/gemma-2b-it-GGUF/resolve/main/gemma-2b-it.Q4_K_M.gguf"
+                    "llama-3.2-1b" -> "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf"
+                    "smollm2-1.7b" -> "https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/resolve/main/smollm2-1.7b-instruct-q8_0.gguf"
+                    "qwen2.5-1.5b" -> "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
                     else -> null
                 }
 

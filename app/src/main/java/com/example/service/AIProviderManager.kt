@@ -138,7 +138,7 @@ class AIProviderManager(
 
     private suspend fun generateAnalysisSync(prompt: String): String = withContext(Dispatchers.IO) {
         // Attempt to initialize preferred model if not initialized
-        val selectedId = settingsManager.preferredOfflineModelId.value ?: "gemma-2b-gguf"
+        val selectedId = settingsManager.preferredOfflineModelId.value ?: "llama-3.2-1b"
         val modelFileName = getFileNameForModelId(selectedId)
         val file = File(context.filesDir, modelFileName)
 
@@ -164,9 +164,10 @@ class AIProviderManager(
 
     private fun getFileNameForModelId(id: String): String {
         return when (id) {
-            "gemma-2b-gguf" -> "gemma-2b-it.Q4_K_M.gguf"
-            "youtu-2b" -> "Youtu-LLM-2B-Q8_0.gguf"
-            else -> "gemma-2b-it.Q4_K_M.gguf"
+            "llama-3.2-1b" -> "Llama-3.2-1B-Instruct-Q8_0.gguf"
+            "smollm2-1.7b" -> "smollm2-1.7b-instruct-q8_0.gguf"
+            "qwen2.5-1.5b" -> "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+            else -> "Llama-3.2-1B-Instruct-Q8_0.gguf"
         }
     }
 }

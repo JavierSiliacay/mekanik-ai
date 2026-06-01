@@ -13,7 +13,7 @@ object MediaPipeLlmInferenceService {
 
     fun getDefaultModelPath(context: Context): String {
         // Updated to match ModelDownloadManager's production GGUF filename
-        return File(context.filesDir, "gemma-2b-it.Q4_K_M.gguf").absolutePath
+        return File(context.filesDir, "Llama-3.2-1B-Instruct-Q8_0.gguf").absolutePath
     }
 
     fun isInitialized(): Boolean {
