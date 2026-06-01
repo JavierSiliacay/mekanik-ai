@@ -1,0 +1,6 @@
+{
+  "name": "Mekanik AI",
+  "description": "Professional offline automotive diagnostic application with OBD-II Bluetooth simulation and dual local/cloud Gemini AI analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
