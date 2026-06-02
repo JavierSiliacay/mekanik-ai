@@ -55,6 +55,8 @@ android {
   configurations.all {
     resolutionStrategy {
       force("com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava")
+      force("androidx.core:core:1.15.0")
+      force("androidx.core:core-ktx:1.15.0")
     }
   }
 

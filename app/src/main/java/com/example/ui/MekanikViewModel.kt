@@ -76,9 +76,18 @@ class MekanikViewModel(
             }
         }
 
+        // Monitor internet connectivity to refresh remote config automatically
+        viewModelScope.launch {
+            networkMonitor.isInternetAvailable.collect { available ->
+                if (available) {
+                    CloudAiClient.refreshConfig()
+                }
+            }
+        }
+
         // Simulate or perform required initialization
         viewModelScope.launch {
-            // Fetch remote config (API keys, etc.) to avoid expired token issues
+            // Initial attempt (handled by network monitor above if online, but good as fallback)
             CloudAiClient.refreshConfig()
 
             // Add any actual heavy loading here if needed (e.g., pre-loading some data)
