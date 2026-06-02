@@ -86,22 +86,8 @@ object CloudAiClient {
     }
 
     suspend fun refreshConfig() {
-        if (CONFIG_URL.isBlank()) {
-            Log.w("CloudAiClient", "CONFIG_URL is blank. Check your .env file and rebuild.")
-            return
-        }
-        try {
-            Log.d("CloudAiClient", "Fetching remote config from: $CONFIG_URL")
-            val config = service.fetchRemoteConfig(CONFIG_URL)
-            if (config.hfApiKey.isNotBlank()) {
-                currentRemoteConfig = config
-                Log.d("CloudAiClient", "Remote config updated successfully. Key starts with: ${config.hfApiKey.take(7)}...")
-            } else {
-                Log.e("CloudAiClient", "Fetched config has an empty API key")
-            }
-        } catch (e: Exception) {
-            Log.e("CloudAiClient", "Failed to update remote config: ${e.message}", e)
-        }
+        // Disabled Remote Config for now to troubleshoot 401 errors
+        Log.d("CloudAiClient", "Remote config is currently disabled, using local .env defaults")
     }
 
     fun getApiKey(): String {
