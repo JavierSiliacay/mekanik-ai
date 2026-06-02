@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.MekanikAI" parent="android:Theme.DeviceDefault.NoActionBar">
+        <!-- Optional: set some default colors if needed -->
+    </style>
 
-    <style name="Theme.MekanikAI" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/mekanik_dark_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/mekanik_brand_logo_original_1780274248851</item>
+        <item name="postSplashScreenTheme">@style/Theme.MekanikAI</item>
+    </style>
 </resources>

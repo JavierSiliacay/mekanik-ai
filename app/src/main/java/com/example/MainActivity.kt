@@ -1,9 +1,12 @@
 package com.example
 
 import android.os.Bundle
+import android.view.animation.AnticipateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.animation.doOnEnd
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -47,7 +50,27 @@ import com.example.ui.theme.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // Custom exit animation for the splash screen
+        splashScreen.setOnExitAnimationListener { splashScreenView ->
+            val slideUp = android.animation.ObjectAnimator.ofFloat(
+                splashScreenView.view,
+                android.view.View.TRANSLATION_Y,
+                0f,
+                -splashScreenView.view.height.toFloat()
+            )
+            slideUp.interpolator = AnticipateInterpolator()
+            slideUp.duration = 600L
+
+            // Call remove at the end of the animation.
+            slideUp.doOnEnd { splashScreenView.remove() }
+
+            // Run animation.
+            slideUp.start()
+        }
+
         enableEdgeToEdge()
 
         // 1. Initialize local Room SQLite Database and Repo mapping
@@ -61,12 +84,17 @@ class MainActivity : ComponentActivity() {
         // 2. Create the unified controller factory
         val viewModelFactory = MekanikViewModel.Companion.Factory(application, repository)
 
+        // Jetpack Compose MVVM View Model
+        val viewModel: MekanikViewModel = ViewModelProvider(this, viewModelFactory)[MekanikViewModel::class.java]
+
+        // Keep the splash screen on-screen until the ViewModel is initialized
+        splashScreen.setKeepOnScreenCondition {
+            !viewModel.isInitialized.value
+        }
+
         setContent {
             MekanikAITheme {
-                // Jetpack Compose MVVM View Model
-                val viewModel: MekanikViewModel = viewModel(factory = viewModelFactory)
-
-                // Initialize Automotive Chat ViewModel
+                // Use the already initialized viewModel
                 val chatViewModel: AutomotiveChatViewModel = viewModel(
                     factory = AutomotiveChatViewModel.Companion.Factory(
                         application,

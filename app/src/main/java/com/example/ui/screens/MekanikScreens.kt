@@ -435,14 +435,43 @@ fun VehicleScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
 
+                            var showDeleteConfirmation by remember { mutableStateOf(false) }
+
                             IconButton(
-                                onClick = { viewModel.deleteVehicle(vehicle) },
+                                onClick = { showDeleteConfirmation = true },
                                 modifier = Modifier.testTag("delete_vehicle_${vehicle.id}")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Delete",
                                     tint = MekanikErrorRed.copy(alpha = 0.8f)
+                                )
+                            }
+
+                            if (showDeleteConfirmation) {
+                                AlertDialog(
+                                    onDismissRequest = { showDeleteConfirmation = false },
+                                    title = { Text("Delete Vehicle?") },
+                                    text = { Text("Are you sure you want to delete '${vehicle.name}'? This action cannot be undone.") },
+                                    confirmButton = {
+                                        TextButton(
+                                            onClick = {
+                                                viewModel.deleteVehicle(vehicle)
+                                                showDeleteConfirmation = false
+                                            },
+                                            colors = ButtonDefaults.textButtonColors(contentColor = MekanikErrorRed)
+                                        ) {
+                                            Text("Delete")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showDeleteConfirmation = false }) {
+                                            Text("Cancel")
+                                        }
+                                    },
+                                    containerColor = MekanikSurface,
+                                    titleContentColor = MekanikTextPrimary,
+                                    textContentColor = MekanikTextSecondary
                                 )
                             }
                         }
@@ -1875,8 +1904,10 @@ fun HistoryScreen(
                                 )
                             }
 
+                            var showDeleteConfirmation by remember { mutableStateOf(false) }
+
                             IconButton(
-                                onClick = { viewModel.deleteHistoricalScan(scan) },
+                                onClick = { showDeleteConfirmation = true },
                                 modifier = Modifier.size(24.dp)
                             ) {
                                 Icon(
@@ -1884,6 +1915,33 @@ fun HistoryScreen(
                                     contentDescription = "Delete Log",
                                     tint = MekanikErrorRed.copy(alpha = 0.8f),
                                     modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            if (showDeleteConfirmation) {
+                                AlertDialog(
+                                    onDismissRequest = { showDeleteConfirmation = false },
+                                    title = { Text("Delete Diagnostic Log?") },
+                                    text = { Text("Are you sure you want to delete this scan from your history? This cannot be undone.") },
+                                    confirmButton = {
+                                        TextButton(
+                                            onClick = {
+                                                viewModel.deleteHistoricalScan(scan)
+                                                showDeleteConfirmation = false
+                                            },
+                                            colors = ButtonDefaults.textButtonColors(contentColor = MekanikErrorRed)
+                                        ) {
+                                            Text("Delete")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showDeleteConfirmation = false }) {
+                                            Text("Cancel")
+                                        }
+                                    },
+                                    containerColor = MekanikSurface,
+                                    titleContentColor = MekanikTextPrimary,
+                                    textContentColor = MekanikTextSecondary
                                 )
                             }
                         }

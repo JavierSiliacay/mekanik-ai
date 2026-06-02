@@ -60,6 +60,9 @@ class MekanikViewModel(
     private val _selectedVehicleDtcHistory = MutableStateFlow<List<DtcRecord>>(emptyList())
     val selectedVehicleDtcHistory: StateFlow<List<DtcRecord>> = _selectedVehicleDtcHistory.asStateFlow()
 
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
+
     init {
         // Monitor selected vehicle to update its specific historic logs
         viewModelScope.launch {
@@ -71,6 +74,16 @@ class MekanikViewModel(
                     _selectedVehicleDtcHistory.value = emptyList()
                 }
             }
+        }
+
+        // Simulate or perform required initialization
+        viewModelScope.launch {
+            // Fetch remote config (API keys, etc.) to avoid expired token issues
+            CloudAiClient.refreshConfig()
+
+            // Add any actual heavy loading here if needed (e.g., pre-loading some data)
+            kotlinx.coroutines.delay(1000) // Give splash some time to breathe
+            _isInitialized.value = true
         }
     }
 
@@ -108,10 +121,10 @@ class MekanikViewModel(
             if (model != null && model.downloadState == DownloadState.INSTALLED) {
                 val file = java.io.File(getApplication<Application>().filesDir, model.fileName)
                 if (file.exists()) {
-                    MediaPipeLlmInferenceService.initialize(getApplication(), file.absolutePath)
+                    LlamaService.initialize(file.absolutePath)
                 }
             } else {
-                MediaPipeLlmInferenceService.close()
+                LlamaService.close()
             }
         }
     }
@@ -127,7 +140,7 @@ class MekanikViewModel(
     fun deleteOfflineModel(modelId: String) {
         downloadManager.deleteModel(modelId)
         if (preferredOfflineModelId.value == modelId) {
-            MediaPipeLlmInferenceService.close()
+            LlamaService.close()
         }
     }
 

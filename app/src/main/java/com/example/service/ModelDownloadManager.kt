@@ -38,34 +38,31 @@ class ModelDownloadManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val jobs = mutableMapOf<String, Job>()
 
-    // Models database/list (Strictly under 2B parameters for mobile stability)
+    // Models database/list (Direct GGUF support via llama.cpp)
     private val initialModels = listOf(
         OfflineModel(
             id = "llama-3.2-1b",
             name = "Llama 3.2 1B (GGUF)",
-            description = "Meta's ultra-lightweight 1B model. Extremely fast.",
+            description = "Meta's ultra-lightweight 1B model. Industry standard GGUF.",
             sizeLabel = "1.3 GB",
-            sizeInBytes = 1300000000L,
-            fileName = "Llama-3.2-1B-Instruct-Q8_0.gguf",
-            expectedHash = "592f"
+            sizeInBytes = 1240000000L,
+            fileName = "llama-3.2-1b-instruct-q8_0.gguf"
         ),
         OfflineModel(
             id = "smollm2-1.7b",
             name = "SmolLM2 1.7B (GGUF)",
             description = "HuggingFace's mobile-optimized model. Great balance.",
             sizeLabel = "1.8 GB",
-            sizeInBytes = 1800000000L,
-            fileName = "smollm2-1.7b-instruct-q8_0.gguf",
-            expectedHash = "a1b2"
+            sizeInBytes = 1720000000L,
+            fileName = "smollm2-1.7b-instruct-q8_0.gguf"
         ),
         OfflineModel(
             id = "qwen2.5-1.5b",
             name = "Qwen 2.5 1.5B (GGUF)",
             description = "Alibaba's state-of-the-art small model. Very smart.",
-            sizeLabel = "1.1 GB",
-            sizeInBytes = 1100000000L,
-            fileName = "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            expectedHash = "c3d4"
+            sizeLabel = "1.6 GB",
+            sizeInBytes = 1580000000L,
+            fileName = "qwen2.5-1.5b-instruct-q8_0.gguf"
         )
     )
 
@@ -109,11 +106,11 @@ class ModelDownloadManager(private val context: Context) {
             try {
                 updateModelState(modelId, DownloadState.DOWNLOADING, 0f, "Connecting...")
                 
-                // Use real verified Hugging Face direct download URLs
+                // Use direct GGUF download URLs from Hugging Face
                 val downloadUrl = when(modelId) {
                     "llama-3.2-1b" -> "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf"
-                    "smollm2-1.7b" -> "https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/resolve/main/smollm2-1.7b-instruct-q8_0.gguf"
-                    "qwen2.5-1.5b" -> "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+                    "smollm2-1.7b" -> "https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q8_0.gguf"
+                    "qwen2.5-1.5b" -> "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q8_0.gguf"
                     else -> null
                 }
 

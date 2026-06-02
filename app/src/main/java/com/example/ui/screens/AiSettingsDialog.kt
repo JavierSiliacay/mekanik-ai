@@ -602,8 +602,10 @@ fun AiSettingsDialog(
                                                 Text("RESUME", color = Color.Black, fontWeight = FontWeight.Bold)
                                             }
 
+                                            var showCancelConfirmation by remember { mutableStateOf(false) }
+
                                             OutlinedButton(
-                                                onClick = { viewModel.deleteOfflineModel(model.id) },
+                                                onClick = { showCancelConfirmation = true },
                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MekanikErrorRed),
                                                 border = BorderStroke(1.dp, MekanikErrorRed.copy(alpha = 0.5f)),
                                                 modifier = Modifier.testTag("delete_paused_btn_${model.id}")
@@ -612,6 +614,33 @@ fun AiSettingsDialog(
                                                     imageVector = Icons.Default.Delete,
                                                     contentDescription = "Cancel",
                                                     modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+
+                                            if (showCancelConfirmation) {
+                                                AlertDialog(
+                                                    onDismissRequest = { showCancelConfirmation = false },
+                                                    title = { Text("Cancel Download?") },
+                                                    text = { Text("Are you sure you want to cancel and delete the partial download for '${model.name}'?") },
+                                                    confirmButton = {
+                                                        TextButton(
+                                                            onClick = {
+                                                                viewModel.deleteOfflineModel(model.id)
+                                                                showCancelConfirmation = false
+                                                            },
+                                                            colors = ButtonDefaults.textButtonColors(contentColor = MekanikErrorRed)
+                                                        ) {
+                                                            Text("Cancel & Delete")
+                                                        }
+                                                    },
+                                                    dismissButton = {
+                                                        TextButton(onClick = { showCancelConfirmation = false }) {
+                                                            Text("Keep")
+                                                        }
+                                                    },
+                                                    containerColor = MekanikSurface,
+                                                    titleContentColor = MekanikTextPrimary,
+                                                    textContentColor = MekanikTextSecondary
                                                 )
                                             }
                                         }
@@ -714,14 +743,43 @@ fun AiSettingsDialog(
                                             }
 
                                             // Delete model file button
+                                            var showDeleteConfirmation by remember { mutableStateOf(false) }
+
                                             IconButton(
-                                                onClick = { viewModel.deleteOfflineModel(model.id) },
+                                                onClick = { showDeleteConfirmation = true },
                                                 colors = IconButtonDefaults.iconButtonColors(contentColor = MekanikErrorRed),
                                                 modifier = Modifier.testTag("delete_installed_model_btn_${model.id}")
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.Delete,
                                                     contentDescription = "Delete Model"
+                                                )
+                                            }
+
+                                            if (showDeleteConfirmation) {
+                                                AlertDialog(
+                                                    onDismissRequest = { showDeleteConfirmation = false },
+                                                    title = { Text("Delete AI Model?") },
+                                                    text = { Text("Are you sure you want to remove '${model.name}'? You will need to download it again to use offline mode.") },
+                                                    confirmButton = {
+                                                        TextButton(
+                                                            onClick = {
+                                                                viewModel.deleteOfflineModel(model.id)
+                                                                showDeleteConfirmation = false
+                                                            },
+                                                            colors = ButtonDefaults.textButtonColors(contentColor = MekanikErrorRed)
+                                                        ) {
+                                                            Text("Delete")
+                                                        }
+                                                    },
+                                                    dismissButton = {
+                                                        TextButton(onClick = { showDeleteConfirmation = false }) {
+                                                            Text("Cancel")
+                                                        }
+                                                    },
+                                                    containerColor = MekanikSurface,
+                                                    titleContentColor = MekanikTextPrimary,
+                                                    textContentColor = MekanikTextSecondary
                                                 )
                                             }
                                         }

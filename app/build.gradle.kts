@@ -8,12 +8,12 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk = 36
+  compileSdk = 35
 
   defaultConfig {
     applicationId = "com.aistudio.mekanikai.uxmjpq"
     minSdk = 24
-    targetSdk = 36
+    targetSdk = 35
     versionCode = 2
     versionName = "1.0.1"
 
@@ -22,6 +22,7 @@ android {
     // Default model if not in .env
     buildConfigField("String", "HF_API_KEY", "\"\"")
     buildConfigField("String", "HF_MODEL", "\"google/gemma-4-31B-it:fastest\"")
+    buildConfigField("String", "CONFIG_URL", "\"\"")
   }
 
   signingConfigs {
@@ -50,14 +51,22 @@ android {
     debug {
     }
   }
+
+  configurations.all {
+    resolutionStrategy {
+      force("com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava")
+    }
+  }
+
   compileOptions {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
   }
   buildFeatures {
     compose = true
     buildConfig = true
   }
+
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
@@ -84,6 +93,9 @@ dependencies {
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.core.splashscreen)
+  implementation(libs.androidx.concurrent.futures)
+  implementation("com.google.guava:guava:33.3.1-android")
   // implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -101,7 +113,9 @@ dependencies {
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
-  implementation(libs.mediapipe.tasks.genai)
+  // Use CodeShipping's Llama library (Stable version)
+  implementation("org.codeshipping:llama-kotlin-android:0.1.3")
+  
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

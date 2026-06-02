@@ -1,6 +1,7 @@
 package com.example.service
 
 import com.example.BuildConfig
+import android.util.Log
 import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -43,16 +44,27 @@ data class CloudAiChoice(
 
 data class CloudAiResponse(val choices: List<CloudAiChoice>?)
 
+data class RemoteConfig(
+    @Json(name = "hf_api_key") val hfApiKey: String,
+    @Json(name = "hf_model") val hfModel: String
+)
+
 interface CloudAiApiService {
     @POST("chat/completions")
     suspend fun generateCompletion(
         @Header("Authorization") authorization: String,
         @Body request: CloudAiRequest
     ): CloudAiResponse
+
+    @retrofit2.http.GET
+    suspend fun fetchRemoteConfig(@retrofit2.http.Url url: String): RemoteConfig
 }
 
 object CloudAiClient {
     private const val BASE_URL = "https://router.huggingface.co/v1/"
+    private val CONFIG_URL = BuildConfig.CONFIG_URL
+
+    private var currentRemoteConfig: RemoteConfig? = null
 
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
@@ -73,12 +85,22 @@ object CloudAiClient {
             .create(CloudAiApiService::class.java)
     }
 
+    suspend fun refreshConfig() {
+        try {
+            val config = service.fetchRemoteConfig(CONFIG_URL)
+            currentRemoteConfig = config
+            Log.d("CloudAiClient", "Remote config updated successfully")
+        } catch (e: Exception) {
+            Log.e("CloudAiClient", "Failed to update remote config, using defaults", e)
+        }
+    }
+
     fun getApiKey(): String {
-        return BuildConfig.HF_API_KEY
+        return currentRemoteConfig?.hfApiKey ?: BuildConfig.HF_API_KEY
     }
 
     fun getModel(): String {
-        return BuildConfig.HF_MODEL
+        return currentRemoteConfig?.hfModel ?: BuildConfig.HF_MODEL
     }
 
     // Direct OkHttp access for streaming SSE

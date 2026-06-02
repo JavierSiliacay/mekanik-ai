@@ -113,7 +113,7 @@ class AIProviderManager(
                 throw e
             }
         } else {
-            // OFFLINE MODE (Streaming support for MediaPipe could be added later)
+            // OFFLINE MODE (Native GGUF Streaming)
             val textPrompt = when (prompt) {
                 is String -> prompt
                 is List<*> -> {
@@ -128,46 +128,42 @@ class AIProviderManager(
                 throw Exception("Offline AI requires text input.")
             }
 
-            val result = generateAnalysisSync(textPrompt)
-            if (result.isBlank()) {
-                throw Exception("Offline AI generated an empty response.")
+            // Attempt to initialize preferred model
+            val selectedId = settingsManager.preferredOfflineModelId.value ?: "llama-3.2-1b"
+            val modelFileName = getFileNameForModelId(selectedId)
+            val file = File(context.filesDir, modelFileName)
+
+            if (!file.exists()) {
+                throw Exception("Local model data missing. Please download an offline model in Settings.")
             }
-            emit(result)
+
+            if (LlamaService.getInitializedPath() != file.absolutePath) {
+                LlamaService.initialize(file.absolutePath).onFailure { 
+                    throw Exception("Failed to initialize Llama: ${it.message}")
+                }
+            }
+
+            val startMillis = System.currentTimeMillis()
+            var firstToken = true
+
+            LlamaService.generateText(textPrompt).collect { chunk ->
+                if (firstToken) {
+                    _responseLatency.value = "${System.currentTimeMillis() - startMillis}ms"
+                    firstToken = false
+                }
+                emit(chunk)
+            }
         }
     }.flowOn(Dispatchers.IO)
 
-    private suspend fun generateAnalysisSync(prompt: String): String = withContext(Dispatchers.IO) {
-        // Attempt to initialize preferred model if not initialized
-        val selectedId = settingsManager.preferredOfflineModelId.value ?: "llama-3.2-1b"
-        val modelFileName = getFileNameForModelId(selectedId)
-        val file = File(context.filesDir, modelFileName)
-
-        if (!file.exists()) {
-            throw Exception("Local model data missing. Please download an offline model in Settings.")
-        }
-
-        // Lazy initialize / reload if paths differ
-        if (MediaPipeLlmInferenceService.getInitializedPath() != file.absolutePath) {
-            val initResult = MediaPipeLlmInferenceService.initialize(context, file.absolutePath)
-            if (initResult.isFailure) {
-                throw Exception("Failed to bind local device buffers: ${initResult.exceptionOrNull()?.message}")
-            }
-        }
-
-        val startMillis = System.currentTimeMillis()
-        val text = MediaPipeLlmInferenceService.generateText(prompt)
-        val stopMillis = System.currentTimeMillis()
-        _responseLatency.value = "${stopMillis - startMillis}ms"
-
-        return@withContext text
-    }
+    // Removed generateAnalysisSync as it is no longer needed with direct streaming
 
     private fun getFileNameForModelId(id: String): String {
         return when (id) {
-            "llama-3.2-1b" -> "Llama-3.2-1B-Instruct-Q8_0.gguf"
+            "llama-3.2-1b" -> "llama-3.2-1b-instruct-q8_0.gguf"
             "smollm2-1.7b" -> "smollm2-1.7b-instruct-q8_0.gguf"
-            "qwen2.5-1.5b" -> "qwen2.5-1.5b-instruct-q4_k_m.gguf"
-            else -> "Llama-3.2-1B-Instruct-Q8_0.gguf"
+            "qwen2.5-1.5b" -> "qwen2.5-1.5b-instruct-q8_0.gguf"
+            else -> "llama-3.2-1b-instruct-q8_0.gguf"
         }
     }
 }
