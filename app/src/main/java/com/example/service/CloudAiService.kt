@@ -86,21 +86,30 @@ object CloudAiClient {
     }
 
     suspend fun refreshConfig() {
+        if (CONFIG_URL.isBlank()) {
+            Log.w("CloudAiClient", "CONFIG_URL is blank. Check your .env file and rebuild.")
+            return
+        }
         try {
+            Log.d("CloudAiClient", "Fetching remote config from: $CONFIG_URL")
             val config = service.fetchRemoteConfig(CONFIG_URL)
-            currentRemoteConfig = config
-            Log.d("CloudAiClient", "Remote config updated successfully")
+            if (config.hfApiKey.isNotBlank()) {
+                currentRemoteConfig = config
+                Log.d("CloudAiClient", "Remote config updated successfully. Key starts with: ${config.hfApiKey.take(7)}...")
+            } else {
+                Log.e("CloudAiClient", "Fetched config has an empty API key")
+            }
         } catch (e: Exception) {
-            Log.e("CloudAiClient", "Failed to update remote config, using defaults", e)
+            Log.e("CloudAiClient", "Failed to update remote config: ${e.message}", e)
         }
     }
 
     fun getApiKey(): String {
-        return currentRemoteConfig?.hfApiKey ?: BuildConfig.HF_API_KEY
+        return currentRemoteConfig?.hfApiKey?.trim() ?: BuildConfig.HF_API_KEY.trim()
     }
 
     fun getModel(): String {
-        return currentRemoteConfig?.hfModel ?: BuildConfig.HF_MODEL
+        return currentRemoteConfig?.hfModel?.trim() ?: BuildConfig.HF_MODEL.trim()
     }
 
     // Direct OkHttp access for streaming SSE
