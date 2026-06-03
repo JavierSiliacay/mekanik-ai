@@ -82,8 +82,8 @@ class AIProviderManager(
                 okHttpClient.newCall(okHttpRequest).execute().use { response ->
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string() ?: "Unknown error"
-                        val keyHint = CloudAiClient.getApiKey().take(7)
-                        throw IOException("Cloud API error ${response.code}: $errorBody (Model: $activeModel, Key: $keyHint...)")
+                        Log.e(TAG, "Cloud API error ${response.code}: $errorBody (Model: $activeModel)")
+                        throw IOException("The Cloud AI provider is currently down. Please contact the developer soon to check it. In the meantime, please use the Offline Model.")
                     }
 
                     val reader = response.body?.source() ?: throw IOException("Empty response body")
