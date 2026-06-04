@@ -29,6 +29,11 @@ class SettingsManager(private val context: Context) {
     )
     val preferredOfflineModelId: StateFlow<String?> = _preferredOfflineModelId.asStateFlow()
 
+    private val _customHfApiKey = MutableStateFlow(
+        prefs.getString("custom_hf_api_key", "") ?: ""
+    )
+    val customHfApiKey: StateFlow<String> = _customHfApiKey.asStateFlow()
+
     fun setAiMode(mode: AiMode) {
         prefs.edit().putString("ai_mode", mode.name).apply()
         _aiMode.value = mode
@@ -42,5 +47,10 @@ class SettingsManager(private val context: Context) {
     fun setPreferredOfflineModelId(id: String?) {
         prefs.edit().putString("preferred_offline_model_id", id).apply()
         _preferredOfflineModelId.value = id
+    }
+
+    fun setCustomHfApiKey(key: String) {
+        prefs.edit().putString("custom_hf_api_key", key).apply()
+        _customHfApiKey.value = key
     }
 }

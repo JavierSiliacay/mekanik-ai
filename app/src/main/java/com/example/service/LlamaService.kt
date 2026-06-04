@@ -53,16 +53,14 @@ object LlamaService {
 
     /**
      * Generates text using the library's native Flow support.
+     * The prompt should be pre-formatted with the correct chat template.
      */
-    fun generateText(prompt: String): Flow<String> {
+    fun generateText(formattedPrompt: String): Flow<String> {
         val model = llamaModel 
         if (model == null) {
             Log.e(TAG, "Llama model not initialized.")
             return emptyFlow()
         }
-        
-        // Formatted prompt for Llama 3.2 GGUF
-        val formattedPrompt = "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n$prompt<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
         
         return model.generateStream(formattedPrompt)
     }

@@ -64,6 +64,7 @@ class ObdBluetoothManager(private val context: Context) {
 
     private val TAG = "MekanikObd"
     private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private val COMMAND_TIMEOUT_MS = 2000L
 
     // Extensive PID library from Circuito AI context
     private val PIDS = mapOf(
@@ -93,11 +94,15 @@ class ObdBluetoothManager(private val context: Context) {
     private val _connectedDeviceName = MutableStateFlow<String?>(null)
     val connectedDeviceName: StateFlow<String?> = _connectedDeviceName.asStateFlow()
 
+    private val _handshakeMessage = MutableStateFlow<String?>(null)
+    val handshakeMessage: StateFlow<String?> = _handshakeMessage.asStateFlow()
+
     private val _liveSensorData = MutableStateFlow(ObdSensorData())
     val liveSensorData: StateFlow<ObdSensorData> = _liveSensorData.asStateFlow()
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var pollingJob: Job? = null
+    private var connectionJob: Job? = null
 
     // Known DTC dictionary for immediate, rich offline capabilities
     val dtcDictionary = mapOf(
@@ -182,7 +187,8 @@ class ObdBluetoothManager(private val context: Context) {
         _connectionStatus.value = ConnectionStatus.CONNECTING
         _connectedDeviceName.value = deviceName
 
-        scope.launch {
+        connectionJob?.cancel()
+        connectionJob = scope.launch {
             try {
                 val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
                 val device = bluetoothAdapter.getRemoteDevice(deviceAddress)
@@ -196,14 +202,17 @@ class ObdBluetoothManager(private val context: Context) {
                 // Initialize ELM327
                 if (initializeElm327()) {
                     _connectionStatus.value = ConnectionStatus.CONNECTED
+                    _handshakeMessage.value = "Connected to $deviceName"
                     startDataPolling()
                 } else {
                     _connectionStatus.value = ConnectionStatus.ERROR
+                    // Handshake message is set inside initializeElm327
                     disconnect()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Connection failed: ${e.message}")
                 _connectionStatus.value = ConnectionStatus.ERROR
+                _handshakeMessage.value = "Connection failed: ${e.localizedMessage}"
                 disconnect()
             }
         }
@@ -212,18 +221,59 @@ class ObdBluetoothManager(private val context: Context) {
     private suspend fun initializeElm327(): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                // Reset ELM327
-                sendCommand("ATZ")
-                delay(1000)
-                // Echo off
-                sendCommand("ATE0")
-                // Linefeeds off
-                sendCommand("ATL0")
-                // Select protocol (Auto)
-                sendCommand("ATSP0")
+                Log.d(TAG, "Initializing ELM327...")
+                _handshakeMessage.value = "Resetting adapter (ATZ)..."
+                
+                // 1. Reset ELM327
+                val resetResponse = sendCommand("ATZ")
+                if (resetResponse == null || !resetResponse.contains("ELM327", ignoreCase = true)) {
+                    // Some clones don't return ELM327 on ATZ, but we should get SOMETHING
+                    if (resetResponse == null) {
+                        Log.e(TAG, "ATZ failed: No response")
+                        _handshakeMessage.value = "No response from adapter. Check power."
+                        return@withContext false
+                    }
+                }
+                delay(1000) // Give it time to reboot
+
+                _handshakeMessage.value = "Querying device info (ATI)..."
+                val idResponse = sendCommand("ATI")
+                Log.d(TAG, "Device ID: $idResponse")
+
+                _handshakeMessage.value = "Configuring adapter settings..."
+                // 2. Basic Configuration
+                sendCommand("ATE0") // Echo Off
+                sendCommand("ATL0") // Linefeeds Off
+                sendCommand("ATS0") // Spaces Off
+                sendCommand("ATH0") // Headers Off
+                sendCommand("ATCAF1") // CAN Auto Formatting On
+                sendCommand("ATM0") // Memory Off
+                sendCommand("ATSP0") // Protocol Auto
+                
+                _handshakeMessage.value = "Verifying ECU connection (0100)..."
+                // 3. Functional test - request supported PIDs
+                var testQuery = sendCommand("0100")
+                
+                // If it fails, try to force a protocol if we know one, 
+                // but for now let's just retry once
+                if (testQuery == null || testQuery.contains("SEARCHING") || testQuery.contains("UNABLE")) {
+                    _handshakeMessage.value = "ECU searching... waiting 2s"
+                    delay(2000)
+                    testQuery = sendCommand("0100")
+                }
+
+                if (testQuery == null || testQuery.contains("ERROR") || testQuery.contains("NO DATA") || testQuery.contains("UNABLE")) {
+                    Log.w(TAG, "ECU handshake failed: $testQuery")
+                    _handshakeMessage.value = "ECU not responding. Ignition ON?"
+                    return@withContext false
+                }
+                
+                _handshakeMessage.value = "Handshake successful."
+                Log.d(TAG, "ELM327 Handshake Complete")
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Initialization failed: ${e.message}")
+                _handshakeMessage.value = "Handshake failed: ${e.localizedMessage}"
                 false
             }
         }
@@ -248,6 +298,7 @@ class ObdBluetoothManager(private val context: Context) {
                     val iat = queryPid("010F")
                     val stft = queryPid("0106")
                     val ltft = queryPid("0107")
+                    val odo = queryPid("01A6")
 
                     _liveSensorData.value = _liveSensorData.value.copy(
                         rpm = rpm ?: _liveSensorData.value.rpm,
@@ -262,7 +313,8 @@ class ObdBluetoothManager(private val context: Context) {
                         throttlePosition = throttle ?: _liveSensorData.value.throttlePosition,
                         intakeAirTemp = iat ?: _liveSensorData.value.intakeAirTemp,
                         shortTermFuelTrim = stft ?: _liveSensorData.value.shortTermFuelTrim,
-                        longTermFuelTrim = ltft ?: _liveSensorData.value.longTermFuelTrim
+                        longTermFuelTrim = ltft ?: _liveSensorData.value.longTermFuelTrim,
+                        odometer = odo ?: _liveSensorData.value.odometer
                     )
 
                     // Periodically try to fetch VIN if missing
@@ -285,7 +337,7 @@ class ObdBluetoothManager(private val context: Context) {
         val config = PIDS[pid] ?: return null
 
         return withContext(Dispatchers.IO) {
-            val response = sendCommand(pidCode)
+            val response = sendCommand(pidCode) ?: return@withContext null
             // Look for 41 + PID (Service 01 response)
             val successPrefix = "41$pid"
             if (response.contains(successPrefix)) {
@@ -312,7 +364,7 @@ class ObdBluetoothManager(private val context: Context) {
 
     suspend fun queryVin(): String? {
         return withContext(Dispatchers.IO) {
-            val response = sendCommand("0902")
+            val response = sendCommand("0902") ?: return@withContext null
             if (response.contains("4902")) {
                 val raw = response.substringAfter("4902").replace(" ", "").trim()
                 val bytes = mutableListOf<Int>()
@@ -328,25 +380,46 @@ class ObdBluetoothManager(private val context: Context) {
         }
     }
 
-    private suspend fun sendCommand(cmd: String): String {
+    private suspend fun sendCommand(cmd: String): String? {
         return withContext(Dispatchers.IO) {
-            val out = outputStream ?: throw IOException("Output stream is null")
-            val input = inputStream ?: throw IOException("Input stream is null")
+            val out = outputStream ?: return@withContext null
+            val input = inputStream ?: return@withContext null
 
-            out.write((cmd + "\r").toByteArray())
-            out.flush()
+            try {
+                // Clear any leftover data in input stream
+                while (input.available() > 0) {
+                    input.read()
+                }
 
-            val buffer = StringBuilder()
-            var char: Int
-            // ELM327 responses end with '>'
-            while (true) {
-                char = input.read()
-                if (char == -1 || char.toChar() == '>') break
-                buffer.append(char.toChar())
+                out.write((cmd + "\r").toByteArray())
+                out.flush()
+
+                val buffer = StringBuilder()
+                val startTime = System.currentTimeMillis()
+                
+                while (System.currentTimeMillis() - startTime < COMMAND_TIMEOUT_MS) {
+                    if (input.available() > 0) {
+                        val char = input.read()
+                        if (char == -1 || char.toChar() == '>') break
+                        buffer.append(char.toChar())
+                    } else {
+                        delay(10)
+                    }
+                }
+                
+                val result = buffer.toString().trim()
+                Log.d(TAG, "> $cmd | < $result")
+                
+                if (result.isEmpty() && cmd != "ATZ") {
+                    Log.w(TAG, "Empty response for command: $cmd")
+                    null
+                } else {
+                    result
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending command $cmd: ${e.message}")
+                null
             }
-            val result = buffer.toString().trim()
-            Log.d(TAG, "> $cmd | < $result")
-            result
         }
     }
 
@@ -371,6 +444,7 @@ class ObdBluetoothManager(private val context: Context) {
 
         _connectionStatus.value = ConnectionStatus.DISCONNECTED
         _connectedDeviceName.value = null
+        _handshakeMessage.value = null
         _liveSensorData.value = ObdSensorData()
     }
 
@@ -381,7 +455,7 @@ class ObdBluetoothManager(private val context: Context) {
         return withContext(Dispatchers.IO) {
             if (_connectionStatus.value == ConnectionStatus.CONNECTED) {
                 try {
-                    val response = sendCommand("03") // Mode 03: Request trouble codes
+                    val response = sendCommand("03") ?: "" // Mode 03: Request trouble codes
                     // response is usually like "43 01 33 00 00 00 00" or similar.
                     // Simplified parsing for ELM327:
                     val codes = parseDtcResponse(response)
@@ -395,8 +469,24 @@ class ObdBluetoothManager(private val context: Context) {
         }
     }
 
+    /**
+     * Sends Mode 04 command to clear diagnostic trouble codes and reset MIL.
+     */
+    fun clearTroubleCodes() {
+        scope.launch {
+            Log.d(TAG, "Attempting to clear DTCs (Mode 04)")
+            // Mode 04 clears stored codes, freeze frame data, and oxygen sensor results
+            sendCommand("04")
+        }
+    }
+
     private fun parseDtcResponse(response: String): List<String> {
-        val cleaned = response.replace(" ", "").replace("\r", "").replace("\n", "")
+        // Remove spaces, newlines and ELM327 CAN multi-frame line identifiers (e.g. 0: or 1:)
+        val cleaned = response.replace(" ", "")
+            .replace("\r", "")
+            .replace("\n", "")
+            .replace(Regex("\\d:"), "")
+
         // Mode 03 response starts with 43. Each DTC is 2 bytes (4 hex chars).
         if (cleaned.contains("43")) {
             val data = cleaned.substringAfter("43")
@@ -417,7 +507,7 @@ class ObdBluetoothManager(private val context: Context) {
                     
                     codes.add("$prefix$d1$d2$b2")
                 } catch (e: Exception) {
-                    Log.e(TAG, "DTC Decode error: ${e.message}")
+                    Log.e(TAG, "DTC Decode error for hex $hex: ${e.message}")
                 }
             }
             return codes
@@ -426,14 +516,10 @@ class ObdBluetoothManager(private val context: Context) {
     }
 
     /**
-     * Clears all current codes
+     * Cleans up resources when the manager is no longer needed
      */
-    fun clearTroubleCodes() {
-        scope.launch {
-            if (_connectionStatus.value == ConnectionStatus.CONNECTED) {
-                sendCommand("04") // OBD-II Clear DTCs command
-                activeCodes.clear()
-            }
-        }
+    fun close() {
+        disconnect()
+        scope.cancel()
     }
 }

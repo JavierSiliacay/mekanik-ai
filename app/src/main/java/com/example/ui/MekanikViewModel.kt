@@ -37,6 +37,7 @@ class MekanikViewModel(
     // Observable flows from OBD adapter
     val connectionStatus: StateFlow<ConnectionStatus> = obdManager.connectionStatus
     val connectedDeviceName: StateFlow<String?> = obdManager.connectedDeviceName
+    val handshakeMessage: StateFlow<String?> = obdManager.handshakeMessage
     val liveSensorData: StateFlow<ObdSensorData> = obdManager.liveSensorData
 
     // DTC Scanner State
@@ -52,6 +53,9 @@ class MekanikViewModel(
 
     private val _aiAnalysisReport = MutableStateFlow<String?>(null)
     val aiAnalysisReport: StateFlow<String?> = _aiAnalysisReport.asStateFlow()
+
+    private val _batteryAlert = MutableStateFlow<String?>(null)
+    val batteryAlert: StateFlow<String?> = _batteryAlert.asStateFlow()
 
     // Historical timeline state for the selected vehicle
     private val _selectedVehicleScans = MutableStateFlow<List<DiagnosticScan>>(emptyList())
@@ -85,6 +89,36 @@ class MekanikViewModel(
             }
         }
 
+        // Monitor battery health for engine-off and charging scenarios
+        viewModelScope.launch {
+            liveSensorData.collect { data ->
+                if (data.batteryVoltage <= 0f) {
+                    _batteryAlert.value = null
+                    return@collect
+                }
+
+                if (data.rpm < 200) { // Engine Off or Cranking
+                    when {
+                        data.batteryVoltage < 11.5f -> {
+                            _batteryAlert.value = "CRITICAL: Battery is deeply discharged (${data.batteryVoltage.format()}V). Charge or jump-start now."
+                        }
+                        data.batteryVoltage < 11.9f -> {
+                            _batteryAlert.value = "WARNING: Battery voltage is low (${data.batteryVoltage.format()}V). Minimize electrical load."
+                        }
+                        else -> _batteryAlert.value = null
+                    }
+                } else { // Engine Running
+                    if (data.batteryVoltage < 13.0f && data.batteryVoltage > 5.0f) {
+                        _batteryAlert.value = "SYSTEM ALERT: Low charging voltage (${data.batteryVoltage.format()}V). Alternator check recommended."
+                    } else if (data.batteryVoltage > 15.5f) {
+                        _batteryAlert.value = "CRITICAL: Overcharging detected (${data.batteryVoltage.format()}V). regulator failure possible."
+                    } else {
+                        _batteryAlert.value = null
+                    }
+                }
+            }
+        }
+
         // Simulate or perform required initialization
         viewModelScope.launch {
             // Initial attempt (handled by network monitor above if online, but good as fallback)
@@ -107,6 +141,7 @@ class MekanikViewModel(
     val onlineConnectionStatus: StateFlow<String> = aiProviderManager.onlineConnectionStatus
     val apiHealthStatus: StateFlow<String> = aiProviderManager.apiHealthStatus
     val responseLatency: StateFlow<String> = aiProviderManager.responseLatency
+    val customHfApiKey: StateFlow<String> = settingsManager.customHfApiKey
 
     private val _aiNetworkWarning = MutableStateFlow<String?>(null)
     val aiNetworkWarning: StateFlow<String?> = _aiNetworkWarning.asStateFlow()
@@ -155,6 +190,10 @@ class MekanikViewModel(
 
     fun verifyModelIntegrity(modelId: String, onResult: (Boolean, String) -> Unit) {
         downloadManager.verifyModelIntegrity(modelId, onResult)
+    }
+
+    fun setCustomHfApiKey(key: String) {
+        settingsManager.setCustomHfApiKey(key)
     }
 
 
@@ -250,6 +289,10 @@ class MekanikViewModel(
             val dtcList = obdManager.getActiveTroubleCodes()
             _scannedCodes.value = dtcList
             _isScanning.value = false
+
+            if (dtcList.isEmpty()) {
+                _aiAnalysisReport.value = "✅ Diagnostic check complete. No fault codes detected in the engine control unit. System reporting healthy operating parameters."
+            }
 
             // Save the diagnostic session dynamically in Room
             val codeString = dtcList.joinToString(",") { it.code }
@@ -357,4 +400,11 @@ class MekanikViewModel(
             }
         }
     }
+}
+
+/**
+ * Common formatting function to ensure US Locale and consistent precision
+ */
+fun Float.format(digits: Int = 1): String {
+    return String.format(java.util.Locale.US, "%.${digits}f", this)
 }

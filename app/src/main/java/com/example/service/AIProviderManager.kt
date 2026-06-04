@@ -59,10 +59,10 @@ class AIProviderManager(
             _onlineConnectionStatus.value = "Online"
             val activeModel = settingsManager.preferredOnlineModel.value
 
-            val messages = if (prompt is List<*>) {
-                listOf(CloudAiMessage(role = "user", content = prompt as List<Any>))
-            } else {
-                listOf(CloudAiMessage(role = "user", content = prompt.toString()))
+            val messages = when (prompt) {
+                is List<*> -> prompt.filterIsInstance<CloudAiMessage>()
+                is String -> listOf(CloudAiMessage(role = "user", content = prompt))
+                else -> listOf(CloudAiMessage(role = "user", content = prompt.toString()))
             }
 
             val request = CloudAiRequest(
@@ -71,8 +71,11 @@ class AIProviderManager(
                 stream = true
             )
 
+            val customKey = settingsManager.customHfApiKey.value
+            val apiKey = CloudAiClient.getApiKey(customKey)
+            
             val okHttpClient = CloudAiClient.getOkHttpClient()
-            val okHttpRequest = CloudAiClient.createStreamRequest(request)
+            val okHttpRequest = CloudAiClient.createStreamRequest(request, apiKey)
             val moshi = CloudAiClient.getMoshi()
             val responseAdapter = moshi.adapter(CloudAiResponse::class.java)
 
@@ -115,22 +118,33 @@ class AIProviderManager(
             }
         } else {
             // OFFLINE MODE (Native GGUF Streaming)
-            val textPrompt = when (prompt) {
-                is String -> prompt
-                is List<*> -> {
-                    prompt.filterIsInstance<CloudAiContent>()
-                        .mapNotNull { it.text }
-                        .joinToString("\n\n")
+            val selectedId = settingsManager.preferredOfflineModelId.value ?: "llama-3.2-1b"
+            
+            val formattedPrompt = when {
+                prompt is String && (prompt.contains("<|im_start|>") || prompt.contains("<|start_header_id|>")) -> {
+                    // Already formatted
+                    prompt
                 }
-                else -> prompt.toString()
+                prompt is List<*> && prompt.all { it is CloudAiMessage } -> {
+                    // Properly format a conversation history
+                    formatOfflineConversation(selectedId, prompt.filterIsInstance<CloudAiMessage>())
+                }
+                else -> {
+                    // Single prompt fallback
+                    val content = when (prompt) {
+                        is String -> prompt
+                        is List<*> -> prompt.filterIsInstance<CloudAiContent>().mapNotNull { it.text }.joinToString("\n\n")
+                        else -> prompt.toString()
+                    }
+                    applyChatTemplate(selectedId, content)
+                }
             }
             
-            if (textPrompt.isBlank()) {
+            if (formattedPrompt.isBlank()) {
                 throw Exception("Offline AI requires text input.")
             }
 
             // Attempt to initialize preferred model
-            val selectedId = settingsManager.preferredOfflineModelId.value ?: "llama-3.2-1b"
             val modelFileName = getFileNameForModelId(selectedId)
             val file = File(context.filesDir, modelFileName)
 
@@ -147,7 +161,7 @@ class AIProviderManager(
             val startMillis = System.currentTimeMillis()
             var firstToken = true
 
-            LlamaService.generateText(textPrompt).collect { chunk ->
+            LlamaService.generateText(formattedPrompt).collect { chunk ->
                 if (firstToken) {
                     _responseLatency.value = "${System.currentTimeMillis() - startMillis}ms"
                     firstToken = false
@@ -156,6 +170,53 @@ class AIProviderManager(
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Formats a full conversation history into a single prompt string for GGUF models.
+     */
+    private fun formatOfflineConversation(modelId: String, messages: List<CloudAiMessage>): String {
+        val sb = StringBuilder()
+        val isLlama = modelId.contains("llama-3")
+        val isChatML = modelId.contains("qwen") || modelId.contains("smollm")
+
+        messages.forEach { msg ->
+            val role = msg.role ?: "user"
+            val content = when (val c = msg.content) {
+                is String -> c
+                is List<*> -> c.filterIsInstance<CloudAiContent>().mapNotNull { it.text }.joinToString("\n")
+                else -> c.toString()
+            }
+
+            when {
+                isLlama -> {
+                    if (sb.isEmpty()) sb.append("<|begin_of_text|>")
+                    sb.append("<|start_header_id|>$role<|end_header_id|>\n\n$content<|eot_id|>")
+                }
+                isChatML -> {
+                    sb.append("<|im_start|>$role\n$content<|im_end|>\n")
+                }
+                else -> {
+                    sb.append("${role.replaceFirstChar { it.uppercase() }}: $content\n")
+                }
+            }
+        }
+
+        // Finalize with assistant trigger
+        when {
+            isLlama -> sb.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
+            isChatML -> sb.append("<|im_start|>assistant\n")
+            else -> sb.append("Assistant: ")
+        }
+
+        return sb.toString()
+    }
+
+    /**
+     * Applies the correct chat template tokens based on the model architecture.
+     */
+    private fun applyChatTemplate(modelId: String, userPrompt: String): String {
+        return formatOfflineConversation(modelId, listOf(CloudAiMessage(role = "user", content = userPrompt)))
+    }
 
     // Removed generateAnalysisSync as it is no longer needed with direct streaming
 

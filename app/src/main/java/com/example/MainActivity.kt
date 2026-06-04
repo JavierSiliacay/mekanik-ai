@@ -1,10 +1,14 @@
 package com.example
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import android.view.animation.AnticipateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
 import androidx.core.animation.doOnEnd
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.BorderStroke
@@ -12,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.History
@@ -31,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -49,9 +55,36 @@ import com.example.ui.screens.VehicleScreen
 import com.example.ui.theme.*
 
 class MainActivity : ComponentActivity() {
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.entries.all { it.value }
+        if (!allGranted) {
+            // Handle permission denial - maybe show a snackbar or a dialog
+        }
+    }
+
+    private fun checkAndRequestPermissions() {
+        val permissions = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            permissions.add(Manifest.permission.BLUETOOTH)
+            permissions.add(Manifest.permission.BLUETOOTH_ADMIN)
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        requestPermissionLauncher.launch(permissions.toTypedArray())
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        checkAndRequestPermissions()
 
         // Custom exit animation for the splash screen
         splashScreen.setOnExitAnimationListener { splashScreenView ->
@@ -133,20 +166,20 @@ fun ScanAiIcon(modifier: Modifier = Modifier) {
             val color = Color.Black
 
             // Top-Left corner
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(2.dp.toPx(), 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(length, 2.dp.toPx()), strokeWidth = strokeWidth)
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(2.dp.toPx(), 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(2.dp.toPx(), length), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(2.dp.toPx(), 2.dp.toPx()), end = Offset(length, 2.dp.toPx()), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(2.dp.toPx(), 2.dp.toPx()), end = Offset(2.dp.toPx(), length), strokeWidth = strokeWidth)
 
             // Top-Right corner
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(size.width - 2.dp.toPx(), 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(size.width - length, 2.dp.toPx()), strokeWidth = strokeWidth)
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(size.width - 2.dp.toPx(), 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(size.width - 2.dp.toPx(), length), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(size.width - 2.dp.toPx(), 2.dp.toPx()), end = Offset(size.width - length, 2.dp.toPx()), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(size.width - 2.dp.toPx(), 2.dp.toPx()), end = Offset(size.width - 2.dp.toPx(), length), strokeWidth = strokeWidth)
 
             // Bottom-Left corner
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(2.dp.toPx(), size.height - 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(length, size.height - 2.dp.toPx()), strokeWidth = strokeWidth)
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(2.dp.toPx(), size.height - 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(2.dp.toPx(), size.height - length), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(2.dp.toPx(), size.height - 2.dp.toPx()), end = Offset(length, size.height - 2.dp.toPx()), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(2.dp.toPx(), size.height - 2.dp.toPx()), end = Offset(2.dp.toPx(), size.height - length), strokeWidth = strokeWidth)
 
             // Bottom-Right corner
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(size.width - length, size.height - 2.dp.toPx()), strokeWidth = strokeWidth)
-            drawLine(color, start = androidx.compose.ui.geometry.Offset(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()), end = androidx.compose.ui.geometry.Offset(size.width - 2.dp.toPx(), size.height - length), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()), end = Offset(size.width - length, size.height - 2.dp.toPx()), strokeWidth = strokeWidth)
+            drawLine(color, start = Offset(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()), end = Offset(size.width - 2.dp.toPx(), size.height - length), strokeWidth = strokeWidth)
         }
 
         // Inner Spark icon
@@ -170,6 +203,7 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
     // Reactively monitor connection attributes to notify visually
     val selectedVehicle by viewModel.selectedVehicle.collectAsState()
     val connStatus by viewModel.connectionStatus.collectAsState()
+    val batteryAlert by viewModel.batteryAlert.collectAsState()
     
     // Monitors for offline model lists and network warning triggers
     val aiNetworkWarning by viewModel.aiNetworkWarning.collectAsState()
@@ -200,7 +234,7 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
                     },
                     modifier = Modifier.testTag("tablet_nav_rail")
                 ) {
-                    MekanikTab.values().forEach { tab ->
+                    MekanikTab.entries.forEach { tab ->
                         val isTabSelected = activeTab == tab
                         NavigationRailItem(
                             selected = isTabSelected,
@@ -242,6 +276,7 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
                             MekanikTopHeaderBanner(
                                 selectedVehicle = selectedVehicle,
                                 connStatus = connStatus,
+                                batteryAlert = batteryAlert,
                                 onSettingsClick = { showSettingsDialog = true }
                             )
                         },
@@ -265,6 +300,7 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
                     MekanikTopHeaderBanner(
                         selectedVehicle = selectedVehicle,
                         connStatus = connStatus,
+                        batteryAlert = batteryAlert,
                         onSettingsClick = { showSettingsDialog = true }
                     )
                 },
@@ -379,7 +415,7 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
                         ) {
                             FloatingActionButton(
                                 onClick = {
-                                    if (connStatus == com.example.service.ConnectionStatus.CONNECTED) {
+                                    if (connStatus == ConnectionStatus.CONNECTED) {
                                         activeTab = MekanikTab.SCANNER
                                         viewModel.scanVehicleTroubleCodes(true)
                                     } else {
@@ -569,9 +605,10 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
 fun MekanikTopHeaderBanner(
     selectedVehicle: com.example.data.Vehicle?,
     connStatus: ConnectionStatus,
+    batteryAlert: String?,
     onSettingsClick: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(MekanikSurface)
@@ -585,53 +622,91 @@ fun MekanikTopHeaderBanner(
                     strokeWidth = 1.dp.toPx()
                 )
             }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left Space to balance the icon on the right and keep title perfectly centered
-        Spacer(modifier = Modifier.size(48.dp))
-
-        // Center Column (Title and status)
-        Column(
-            modifier = Modifier.weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "MEKANIK AI",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 2.sp
-                ),
-                color = MekanikNeonGreen
-            )
-            if (selectedVehicle != null) {
+            // Left Space to balance the icon on the right and keep title perfectly centered
+            Spacer(modifier = Modifier.size(48.dp))
+
+            // Center Column (Title and status)
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    text = "Vehicle: ${selectedVehicle.name} (${if (connStatus == ConnectionStatus.CONNECTED) "OBD Connected" else "OBD Offline"})",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (connStatus == ConnectionStatus.CONNECTED) MekanikNeonGreen else MekanikTextSecondary
+                    text = "MEKANIK AI",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 2.sp
+                    ),
+                    color = MekanikNeonGreen
                 )
-            } else {
-                Text(
-                    text = "Offboard: Select Garage Profile",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MekanikTextSecondary
+                if (selectedVehicle != null) {
+                    Text(
+                        text = "Vehicle: ${selectedVehicle.name} (${if (connStatus == ConnectionStatus.CONNECTED) "OBD Connected" else "OBD Offline"})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (connStatus == ConnectionStatus.CONNECTED) MekanikNeonGreen else MekanikTextSecondary
+                    )
+                } else {
+                    Text(
+                        text = "Offboard: Select Garage Profile",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MekanikTextSecondary
+                    )
+                }
+            }
+
+            // Pinned Settings Gear (Far Right)
+            IconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("app_settings_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "AI Configuration settings",
+                    tint = MekanikNeonGreen,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
 
-        // Pinned Settings Gear (Far Right)
-        IconButton(
-            onClick = onSettingsClick,
-            modifier = Modifier
-                .size(48.dp)
-                .testTag("app_settings_btn")
+        // Global Battery Alert Strip
+        AnimatedVisibility(
+            visible = batteryAlert != null && connStatus == ConnectionStatus.CONNECTED,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
         ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "AI Configuration settings",
-                tint = MekanikNeonGreen,
-                modifier = Modifier.size(24.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        if (batteryAlert?.startsWith("CRITICAL") == true)
+                            MekanikErrorRed.copy(alpha = 0.9f) else MekanikWarningYellow.copy(alpha = 0.9f)
+                    )
+                    .padding(vertical = 4.dp, horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.BatteryAlert,
+                        contentDescription = "Battery Alert",
+                        tint = Color.Black,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = batteryAlert ?: "",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }

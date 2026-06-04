@@ -4,7 +4,6 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,8 +24,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.service.AiMode
+import com.example.service.CloudAiClient
 import com.example.service.DownloadState
-import com.example.service.OfflineModel
 import com.example.ui.MekanikViewModel
 import com.example.ui.theme.*
 
@@ -34,20 +33,21 @@ import com.example.ui.theme.*
 @Composable
 fun AiSettingsDialog(
     viewModel: MekanikViewModel,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val aiMode by viewModel.aiMode.collectAsState()
-    val preferredOnlineModel by viewModel.preferredOnlineModel.collectAsState()
     val preferredOfflineModelId by viewModel.preferredOfflineModelId.collectAsState()
     
     val isInternetAvailable by viewModel.isInternetAvailable.collectAsState()
     val offlineModels by viewModel.offlineModels.collectAsState()
     
-    val onlineConnectionStatus by viewModel.onlineConnectionStatus.collectAsState()
     val apiHealthStatus by viewModel.apiHealthStatus.collectAsState()
     val responseLatency by viewModel.responseLatency.collectAsState()
+    val customHfApiKey by viewModel.customHfApiKey.collectAsState()
+
+    var showKeyEdit by remember { mutableStateOf(false) }
+    var tempKey by remember { mutableStateOf(customHfApiKey) }
 
     val hasAnyInstalledLocal = remember(offlineModels) {
         offlineModels.any { it.downloadState == DownloadState.INSTALLED }
@@ -321,7 +321,7 @@ fun AiSettingsDialog(
                                             .padding(horizontal = 6.dp, vertical = 3.dp)
                                     ) {
                                         Text(
-                                            text = preferredOnlineModel,
+                                            text = "Google Gemma 4 31B",
                                             color = Color.White,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 9.sp,
@@ -386,6 +386,96 @@ fun AiSettingsDialog(
                                         color = MekanikNeonGreen,
                                         fontFamily = FontFamily.Monospace
                                     )
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // CLOUD API CREDENTIALS SECTION
+                                val currentKey = CloudAiClient.getApiKey(customHfApiKey)
+                                val usingDefault = customHfApiKey.isBlank() && currentKey.isNotEmpty()
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (currentKey.isEmpty()) MekanikErrorRed.copy(alpha = 0.05f) 
+                                            else MekanikDarkGreen.copy(alpha = 0.2f),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (currentKey.isEmpty()) MekanikErrorRed.copy(alpha = 0.3f) 
+                                            else MekanikNeonGreen.copy(alpha = 0.2f),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column {
+                                            Text(
+                                                "CLOUD AI AUTHORIZATION",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
+                                                color = if (currentKey.isEmpty()) MekanikErrorRed else MekanikNeonGreen
+                                            )
+                                            Text(
+                                                when {
+                                                    currentKey.isEmpty() -> "Authorization missing. Online mode limited."
+                                                    usingDefault -> "System Default Active (Protected)"
+                                                    else -> "Custom User Key Active"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MekanikTextSecondary
+                                            )
+                                        }
+
+                                        IconButton(onClick = { 
+                                            tempKey = customHfApiKey
+                                            showKeyEdit = !showKeyEdit 
+                                        }) {
+                                            Icon(
+                                                imageVector = if (showKeyEdit) Icons.Default.Close else Icons.Default.SettingsInputComponent,
+                                                contentDescription = "Override Key",
+                                                tint = MekanikNeonGreen,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+
+                                    if (showKeyEdit) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "You can override the default system key with your own Hugging Face token if needed.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MekanikTextSecondary.copy(alpha = 0.8f),
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                        OutlinedTextField(
+                                            value = tempKey,
+                                            onValueChange = { tempKey = it },
+                                            placeholder = { Text("hf_...", color = MekanikTextSecondary.copy(alpha = 0.5f)) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = Color.White,
+                                                unfocusedTextColor = Color.White,
+                                                focusedBorderColor = MekanikNeonGreen,
+                                                unfocusedBorderColor = MekanikDarkGreen
+                                            ),
+                                            trailingIcon = {
+                                                IconButton(onClick = {
+                                                    viewModel.setCustomHfApiKey(tempKey)
+                                                    showKeyEdit = false
+                                                    Toast.makeText(context, if(tempKey.isBlank()) "Returned to System Default" else "Custom Key Saved!", Toast.LENGTH_SHORT).show()
+                                                }) {
+                                                    Icon(Icons.Default.Save, contentDescription = "Save", tint = MekanikNeonGreen)
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -722,7 +812,7 @@ fun AiSettingsDialog(
                                             // Integrity check button
                                             TextButton(
                                                 onClick = {
-                                                    viewModel.verifyModelIntegrity(model.id) { passed, message ->
+                                                    viewModel.verifyModelIntegrity(model.id) { _, message ->
                                                         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                                     }
                                                 },

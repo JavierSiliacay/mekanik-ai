@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.widget.Space
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -44,6 +43,7 @@ import com.example.data.Vehicle
 import com.example.service.ConnectionStatus
 import com.example.service.ObdSensorData
 import com.example.ui.MekanikViewModel
+import com.example.ui.format
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -974,8 +974,10 @@ fun DashboardScreen(
     val selectedVehicle by viewModel.selectedVehicle.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val connectedDeviceName by viewModel.connectedDeviceName.collectAsState()
+    val handshakeMessage by viewModel.handshakeMessage.collectAsState()
     val liveData by viewModel.liveSensorData.collectAsState()
     val scannedCodes by viewModel.scannedCodes.collectAsState()
+    val batteryAlert by viewModel.batteryAlert.collectAsState()
 
     var showConnectorDialog by remember { mutableStateOf(false) }
 
@@ -1068,8 +1070,8 @@ fun DashboardScreen(
                         Text(
                             text = when (connectionStatus) {
                                 ConnectionStatus.CONNECTED -> "Ready: Connected to $connectedDeviceName"
-                                ConnectionStatus.CONNECTING -> "Handshake protocol initiating..."
-                                ConnectionStatus.ERROR -> "Fault: Connection error"
+                                ConnectionStatus.CONNECTING -> handshakeMessage ?: "Handshake protocol initiating..."
+                                ConnectionStatus.ERROR -> handshakeMessage ?: "Fault: Connection error"
                                 ConnectionStatus.DISCONNECTED -> "Disconnected: Bluetooth inactive"
                             },
                             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
@@ -1097,6 +1099,9 @@ fun DashboardScreen(
                 }
             }
         }
+
+        // Global Battery Voltage Alerts are now handled in the Top Bar for persistent visibility.
+        // Redundant local alert removed to maximize dashboard bento space.
 
         if (connectionStatus != ConnectionStatus.CONNECTED) {
             Box(
@@ -1155,13 +1160,13 @@ fun DashboardScreen(
             ) {
                 MetricBentoCard(
                     label = "Speedometer",
-                    value = String.format(Locale.US, "%.0f", liveData.speed),
+                    value = liveData.speed.format(0),
                     unit = "km/h",
                     modifier = Modifier.weight(1f)
                 )
                 MetricBentoCard(
                     label = "Coolant Temp",
-                    value = String.format(Locale.US, "%.0f", liveData.coolantTemp),
+                    value = liveData.coolantTemp.format(0),
                     unit = "°C",
                     modifier = Modifier.weight(1f)
                 )
@@ -1173,13 +1178,13 @@ fun DashboardScreen(
             ) {
                 MetricBentoCard(
                     label = "Engine Load",
-                    value = String.format(Locale.US, "%.1f", liveData.engineLoad),
+                    value = liveData.engineLoad.format(1),
                     unit = "%",
                     modifier = Modifier.weight(1f)
                 )
                 MetricBentoCard(
                     label = "Battery Voltage",
-                    value = String.format(Locale.US, "%.1f", liveData.batteryVoltage),
+                    value = liveData.batteryVoltage.format(1),
                     unit = "V",
                     modifier = Modifier.weight(1f)
                 )
@@ -1191,13 +1196,13 @@ fun DashboardScreen(
             ) {
                 MetricBentoCard(
                     label = "Throttle Pos",
-                    value = String.format(Locale.US, "%.0f", liveData.throttlePosition),
+                    value = liveData.throttlePosition.format(0),
                     unit = "%",
                     modifier = Modifier.weight(1f)
                 )
                 MetricBentoCard(
                     label = "Mass Air Flow",
-                    value = String.format(Locale.US, "%.2f", liveData.massAirFlow),
+                    value = liveData.massAirFlow.format(2),
                     unit = "g/s",
                     modifier = Modifier.weight(1f)
                 )
@@ -1209,13 +1214,13 @@ fun DashboardScreen(
             ) {
                 MetricBentoCard(
                     label = "Intake Temp",
-                    value = String.format(Locale.US, "%.0f", liveData.intakeAirTemp),
+                    value = liveData.intakeAirTemp.format(0),
                     unit = "°C",
                     modifier = Modifier.weight(1f)
                 )
                 MetricBentoCard(
                     label = "Fuel Level",
-                    value = String.format(Locale.US, "%.0f", liveData.fuelLevel),
+                    value = liveData.fuelLevel.format(0),
                     unit = "%",
                     modifier = Modifier.weight(1f)
                 )
@@ -1227,13 +1232,13 @@ fun DashboardScreen(
             ) {
                 MetricBentoCard(
                     label = "ST Fuel Trim",
-                    value = String.format(Locale.US, "%.1f", liveData.shortTermFuelTrim),
+                    value = liveData.shortTermFuelTrim.format(1),
                     unit = "%",
                     modifier = Modifier.weight(1f)
                 )
                 MetricBentoCard(
                     label = "LT Fuel Trim",
-                    value = String.format(Locale.US, "%.1f", liveData.longTermFuelTrim),
+                    value = liveData.longTermFuelTrim.format(1),
                     unit = "%",
                     modifier = Modifier.weight(1f)
                 )
@@ -1245,13 +1250,13 @@ fun DashboardScreen(
             ) {
                 MetricBentoCard(
                     label = "Intake Pressure",
-                    value = String.format(Locale.US, "%.0f", liveData.intakeManifoldPressure),
+                    value = liveData.intakeManifoldPressure.format(0),
                     unit = "kPa",
                     modifier = Modifier.weight(1f)
                 )
                 MetricBentoCard(
                     label = "Timing Advance",
-                    value = String.format(Locale.US, "%.1f", liveData.timingAdvance),
+                    value = liveData.timingAdvance.format(1),
                     unit = "°",
                     modifier = Modifier.weight(1f)
                 )
@@ -1433,12 +1438,14 @@ fun ScannerScreen(
 ) {
     val selectedVehicle by viewModel.selectedVehicle.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val handshakeMessage by viewModel.handshakeMessage.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val scannedCodes by viewModel.scannedCodes.collectAsState()
     val aiLoading by viewModel.isAiLoading.collectAsState()
     val aiReport by viewModel.aiAnalysisReport.collectAsState()
 
     var useCloudAnalysis by remember { mutableStateOf(false) }
+    var showClearConfirmation by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -1503,12 +1510,27 @@ fun ScannerScreen(
                 }
 
                 Card(colors = CardDefaults.cardColors(
-                    containerColor = if (connectionStatus == ConnectionStatus.CONNECTED) MekanikDarkGreen else Color.DarkGray
+                    containerColor = when (connectionStatus) {
+                        ConnectionStatus.CONNECTED -> MekanikDarkGreen
+                        ConnectionStatus.CONNECTING -> MekanikWarningYellow.copy(alpha = 0.2f)
+                        ConnectionStatus.ERROR -> MekanikErrorRed.copy(alpha = 0.2f)
+                        else -> Color.DarkGray
+                    }
                 )) {
                     Text(
-                        text = if (connectionStatus == ConnectionStatus.CONNECTED) "ECU CONNECTED" else "OFFLINE",
+                        text = when (connectionStatus) {
+                            ConnectionStatus.CONNECTED -> "ECU CONNECTED"
+                            ConnectionStatus.CONNECTING -> "HANDSHAKING..."
+                            ConnectionStatus.ERROR -> "CONNECTION ERROR"
+                            else -> "OFFLINE"
+                        },
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (connectionStatus == ConnectionStatus.CONNECTED) MekanikNeonGreen else Color.LightGray,
+                        color = when (connectionStatus) {
+                            ConnectionStatus.CONNECTED -> MekanikNeonGreen
+                            ConnectionStatus.CONNECTING -> MekanikWarningYellow
+                            ConnectionStatus.ERROR -> MekanikErrorRed
+                            else -> Color.LightGray
+                        },
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
@@ -1597,7 +1619,7 @@ fun ScannerScreen(
                     }
 
                     Button(
-                        onClick = { viewModel.clearTroubleCodesOnEcu() },
+                        onClick = { showClearConfirmation = true },
                         colors = ButtonDefaults.buttonColors(containerColor = MekanikErrorRed),
                         enabled = connectionStatus == ConnectionStatus.CONNECTED && !isScanning,
                         modifier = Modifier
@@ -1610,11 +1632,42 @@ fun ScannerScreen(
                     }
                 }
 
+                if (showClearConfirmation) {
+                    AlertDialog(
+                        onDismissRequest = { showClearConfirmation = false },
+                        title = { Text("Clear Trouble Codes?", color = Color.White) },
+                        text = { Text("This will reset the Check Engine Light and clear all logged ECU faults. Only do this if the vehicle has been repaired.", color = MekanikTextSecondary) },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    viewModel.clearTroubleCodesOnEcu()
+                                    showClearConfirmation = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MekanikErrorRed)
+                            ) {
+                                Text("Clear All Codes", color = Color.Black, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearConfirmation = false }) {
+                                Text("Cancel", color = MekanikTextSecondary)
+                            }
+                        },
+                        containerColor = MekanikSurface
+                    )
+                }
+
                 if (connectionStatus != ConnectionStatus.CONNECTED) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "⚠️ OBD connection requested for scan operations. Select connection on Dashboard tab first.",
-                        color = MekanikWarningYellow,
+                        text = if (connectionStatus == ConnectionStatus.CONNECTING) {
+                            "⏳ ${handshakeMessage ?: "Handshake in progress..."}"
+                        } else if (connectionStatus == ConnectionStatus.ERROR) {
+                            "❌ ${handshakeMessage ?: "Connection failed. Please retry."}"
+                        } else {
+                            "⚠️ OBD connection requested for scan operations. Select connection on Dashboard tab first."
+                        },
+                        color = if (connectionStatus == ConnectionStatus.ERROR) MekanikErrorRed else MekanikWarningYellow,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
@@ -1653,9 +1706,9 @@ fun ScannerScreen(
                         modifier = Modifier.size(48.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("No Trouble Codes Intercepted", color = MekanikTextPrimary, fontWeight = FontWeight.Bold)
+                    Text("ECU STATUS: HEALTHY", color = MekanikTextPrimary, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Run a DTC scan to pull diagnostic metrics from the car ECU.", color = MekanikTextSecondary, fontSize = 12.sp)
+                    Text("No diagnostic trouble codes (DTCs) intercepted from the engine control unit.", color = MekanikTextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
                 }
             }
         } else {
@@ -2012,4 +2065,3 @@ fun HistoryScreen(
         }
     }
 }
-

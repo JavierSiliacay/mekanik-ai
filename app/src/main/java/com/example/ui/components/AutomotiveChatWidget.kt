@@ -114,6 +114,7 @@ fun AutomotiveChatWidget(viewModel: AutomotiveChatViewModel) {
 fun ChatPanel(viewModel: AutomotiveChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val isThinking by viewModel.isAiThinking.collectAsState()
+    val isMemoryLimitReached by viewModel.isMemoryLimitReached.collectAsState()
     val selectedImageUris by viewModel.selectedImageUris.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -194,6 +195,43 @@ fun ChatPanel(viewModel: AutomotiveChatViewModel) {
                     }
                     IconButton(onClick = { viewModel.closeChat() }) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                    }
+                }
+
+                // Memory Limit Warning
+                AnimatedVisibility(
+                    visible = isMemoryLimitReached,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFFF9800).copy(alpha = 0.15f))
+                            .padding(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFFF9800),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Context memory reached. For best accuracy, consider starting a new chat.",
+                                color = Color(0xFFFF9800),
+                                fontSize = 11.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = { viewModel.clearChat() },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.height(24.dp)
+                            ) {
+                                Text("REFRESH", color = Color(0xFFFF9800), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                        }
                     }
                 }
 

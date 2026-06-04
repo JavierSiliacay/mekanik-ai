@@ -47,11 +47,16 @@ class AutomotiveChatViewModel(
     ))
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
+    private val MAX_CONTEXT_MESSAGES = 15 // Increased slightly for better flow
+
     private val _isChatOpen = MutableStateFlow(false)
     val isChatOpen: StateFlow<Boolean> = _isChatOpen.asStateFlow()
 
     private val _isAiThinking = MutableStateFlow(false)
     val isAiThinking: StateFlow<Boolean> = _isAiThinking.asStateFlow()
+
+    private val _isMemoryLimitReached = MutableStateFlow(false)
+    val isMemoryLimitReached: StateFlow<Boolean> = _isMemoryLimitReached.asStateFlow()
 
     var posX by mutableStateOf(prefs.getFloat("chat_icon_x", 0.8f))
     var posY by mutableStateOf(prefs.getFloat("chat_icon_y", 0.7f))
@@ -181,6 +186,11 @@ class AutomotiveChatViewModel(
         _messages.value = _messages.value + userMessage
         _selectedImageUris.value = emptyList() // Clear after sending
 
+        // Check if we are approaching the context limit to warn the user
+        if (_messages.value.size >= MAX_CONTEXT_MESSAGES + 5) {
+            _isMemoryLimitReached.value = true
+        }
+
         viewModelScope.launch {
             _isAiThinking.value = true
             
@@ -210,11 +220,33 @@ class AutomotiveChatViewModel(
                     throw Exception("Could not process message. Please provide text or a valid image.")
                 }
 
+                // Build structured conversation context for both Online and Offline modes
+                val structuredMessages = mutableListOf<com.example.service.CloudAiMessage>()
+                
+                // 1. Add System Instruction
+                structuredMessages.add(com.example.service.CloudAiMessage(role = "system", content = systemPrompt))
+                
+                // 2. Add History (including the message we just added)
+                val history = _messages.value
+                    .filter { it.content != "..." && it.content.isNotEmpty() }
+                    .takeLast(MAX_CONTEXT_MESSAGES)
+                
+                history.forEach { msg ->
+                    structuredMessages.add(com.example.service.CloudAiMessage(
+                        role = if (msg.isUser) "user" else "assistant",
+                        content = msg.content
+                    ))
+                }
+
                 val promptPayload: Any = if (contentList.any { it.type == "image_url" }) {
-                    // Prepend system prompt for multimodal context
-                    listOf(com.example.service.CloudAiContent(type = "text", text = systemPrompt)) + contentList
+                    // Multimodal request (Vision)
+                    listOf(
+                        com.example.service.CloudAiMessage(role = "system", content = systemPrompt),
+                        com.example.service.CloudAiMessage(role = "user", content = contentList)
+                    )
                 } else {
-                    "$systemPrompt\n\nUser: $text\nAssistant:"
+                    // Standard structured text history
+                    structuredMessages
                 }
 
                 var accumulatedResponse = ""
@@ -267,6 +299,7 @@ class AutomotiveChatViewModel(
             )
         )
         _selectedImageUris.value = emptyList()
+        _isMemoryLimitReached.value = false
     }
 
     companion object {

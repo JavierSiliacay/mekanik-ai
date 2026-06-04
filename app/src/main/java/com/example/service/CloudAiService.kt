@@ -1,5 +1,6 @@
 package com.example.service
 
+import android.util.Base64
 import com.example.BuildConfig
 import android.util.Log
 import com.squareup.moshi.Json
@@ -90,8 +91,29 @@ object CloudAiClient {
         Log.d("CloudAiClient", "Remote config is currently disabled, using local .env defaults")
     }
 
-    fun getApiKey(): String {
-        return currentRemoteConfig?.hfApiKey?.trim() ?: BuildConfig.HF_API_KEY.trim()
+    fun getApiKey(customKey: String? = null): String {
+        // 1. Prioritize user-entered key from settings
+        if (!customKey.isNullOrBlank()) return customKey.trim()
+        
+        // 2. Try remote config if available
+        val remoteKey = currentRemoteConfig?.hfApiKey?.trim()
+        if (!remoteKey.isNullOrBlank()) return remoteKey
+        
+        // 3. Use the hardcoded key from BuildConfig (Obfuscated)
+        val configKey = BuildConfig.HF_API_KEY.trim()
+        if (configKey.isBlank()) return ""
+
+        return try {
+            // If it doesn't start with hf_, it's likely Base64 encoded
+            if (!configKey.startsWith("hf_")) {
+                val decoded = Base64.decode(configKey, Base64.DEFAULT)
+                String(decoded).trim()
+            } else {
+                configKey // Return plain key if that's what's there
+            }
+        } catch (e: Exception) {
+            configKey
+        }
     }
 
     fun getModel(): String {
@@ -99,11 +121,11 @@ object CloudAiClient {
     }
 
     // Direct OkHttp access for streaming SSE
-    fun createStreamRequest(request: CloudAiRequest): Request {
+    fun createStreamRequest(request: CloudAiRequest, apiKey: String): Request {
         val json = moshi.adapter(CloudAiRequest::class.java).toJson(request)
         return Request.Builder()
             .url("${BASE_URL}chat/completions")
-            .header("Authorization", "Bearer ${getApiKey()}")
+            .header("Authorization", "Bearer ${apiKey.trim()}")
             .header("Content-Type", "application/json")
             .post(json.toRequestBody())
             .build()
