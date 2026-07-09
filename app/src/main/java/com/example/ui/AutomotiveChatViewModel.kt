@@ -78,6 +78,11 @@ class AutomotiveChatViewModel(
         _isChatOpen.value = !_isChatOpen.value
     }
 
+    fun openChatWithContext(initialMessage: String) {
+        _isChatOpen.value = true
+        sendMessage(initialMessage)
+    }
+
     fun closeChat() {
         _isChatOpen.value = false
     }

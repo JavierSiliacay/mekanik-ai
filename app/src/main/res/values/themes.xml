@@ -6,7 +6,8 @@
 
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/mekanik_dark_bg</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/mekanik_brand_logo_original_1780274248851</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/mekanik_dark_bg</item>
         <item name="postSplashScreenTheme">@style/Theme.MekanikAI</item>
     </style>
 </resources>

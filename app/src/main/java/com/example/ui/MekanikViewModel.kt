@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -54,6 +55,9 @@ class MekanikViewModel(
     private val _aiAnalysisReport = MutableStateFlow<String?>(null)
     val aiAnalysisReport: StateFlow<String?> = _aiAnalysisReport.asStateFlow()
 
+    private val _lastScanTimestamp = MutableStateFlow<Long?>(null)
+    val lastScanTimestamp: StateFlow<Long?> = _lastScanTimestamp.asStateFlow()
+
     private val _batteryAlert = MutableStateFlow<String?>(null)
     val batteryAlert: StateFlow<String?> = _batteryAlert.asStateFlow()
 
@@ -63,6 +67,17 @@ class MekanikViewModel(
 
     private val _selectedVehicleDtcHistory = MutableStateFlow<List<DtcRecord>>(emptyList())
     val selectedVehicleDtcHistory: StateFlow<List<DtcRecord>> = _selectedVehicleDtcHistory.asStateFlow()
+
+    private val _selectedScanDtcRecords = MutableStateFlow<List<DtcRecord>>(emptyList())
+    val selectedScanDtcRecords: StateFlow<List<DtcRecord>> = _selectedScanDtcRecords.asStateFlow()
+
+    fun getDtcRecordsForScan(scanId: Int) {
+        viewModelScope.launch {
+            repository.getDtcRecordsForScan(scanId).collect {
+                _selectedScanDtcRecords.value = it
+            }
+        }
+    }
 
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
@@ -76,6 +91,18 @@ class MekanikViewModel(
                 } else {
                     _selectedVehicleScans.value = emptyList()
                     _selectedVehicleDtcHistory.value = emptyList()
+                    _lastScanTimestamp.value = null
+                }
+            }
+        }
+
+        // Auto-scan on connection
+        viewModelScope.launch {
+            connectionStatus.collect { status ->
+                if (status == ConnectionStatus.CONNECTED) {
+                    // Delay slightly to ensure adapter is ready after handshake
+                    kotlinx.coroutines.delay(1000)
+                    scanVehicleTroubleCodes(useCloudAnalysis = false, isAutoScan = true)
                 }
             }
         }
@@ -124,8 +151,8 @@ class MekanikViewModel(
             // Initial attempt (handled by network monitor above if online, but good as fallback)
             CloudAiClient.refreshConfig()
 
-            // Add any actual heavy loading here if needed (e.g., pre-loading some data)
-            kotlinx.coroutines.delay(1000) // Give splash some time to breathe
+            // Actual heavy loading sequence
+            kotlinx.coroutines.delay(4000) // Allow users to see the themed loading sequence
             _isInitialized.value = true
         }
     }
@@ -270,29 +297,35 @@ class MekanikViewModel(
     }
 
     // Trigger Fault Code Scanning
-    fun scanVehicleTroubleCodes(useLocalAiAnalysis: Boolean) {
+    fun scanVehicleTroubleCodes(useCloudAnalysis: Boolean, isAutoScan: Boolean = false) {
         val vehicle = _selectedVehicle.value ?: return
         if (connectionStatus.value != ConnectionStatus.CONNECTED) return
 
         // Network connectivity check for Online mode
-        if (settingsManager.aiMode.value == AiMode.ONLINE && !networkMonitor.isInternetAvailable.value) {
+        if (!isAutoScan && settingsManager.aiMode.value == AiMode.ONLINE && !networkMonitor.isInternetAvailable.value) {
             _aiNetworkWarning.value = "Your selected online AI mode requires internet connectivity, but the device is currently offline."
             return
         }
 
-        _isScanning.value = true
-        _scannedCodes.value = emptyList()
-        _aiAnalysisReport.value = null
+        if (!isAutoScan) {
+            _isScanning.value = true
+            _scannedCodes.value = emptyList()
+            _aiAnalysisReport.value = null
+        }
 
         viewModelScope.launch {
             // Real OBD-II protocol scan cycle: interrogating standard ECU addresses
             val dtcList = obdManager.getActiveTroubleCodes()
             _scannedCodes.value = dtcList
             _isScanning.value = false
+            _lastScanTimestamp.value = System.currentTimeMillis()
 
-            if (dtcList.isEmpty()) {
+            if (dtcList.isEmpty() && !isAutoScan) {
                 _aiAnalysisReport.value = "✅ Diagnostic check complete. No fault codes detected in the engine control unit. System reporting healthy operating parameters."
             }
+
+            // Skip heavy persistence and AI if it's just an auto-scan that found nothing
+            if (isAutoScan && dtcList.isEmpty()) return@launch
 
             // Save the diagnostic session dynamically in Room
             val codeString = dtcList.joinToString(",") { it.code }
@@ -310,6 +343,27 @@ class MekanikViewModel(
                 odometerReading = liveSensorData.value.odometer.toInt().takeIf { it > 0 } ?: vehicle.odometer
             )
             val scanId = repository.insertScan(scan)
+
+            // If auto-scan found codes but we don't want to trigger full AI yet, just save them
+            if (isAutoScan) {
+                dtcList.forEach { code ->
+                    repository.insertDtcRecord(
+                        DtcRecord(
+                            vehicleId = vehicle.id,
+                            scanId = scanId.toInt(),
+                            code = code.code,
+                            description = code.description,
+                            severity = code.severity,
+                            likelyCauses = code.causes.joinToString("|"),
+                            recommendations = code.recommendations.joinToString("|"),
+                            fullAiAnalysis = "Auto-detected. Perform full scan for AI analysis.",
+                            status = code.status
+                        )
+                    )
+                }
+                refreshVehicleHistory(vehicle.id)
+                return@launch
+            }
 
             // Persist codes locally into the historical timeline record
             dtcList.forEach { code ->
@@ -332,7 +386,8 @@ class MekanikViewModel(
                         severity = code.severity,
                         likelyCauses = code.causes.joinToString("|"),
                         recommendations = code.recommendations.joinToString("|"),
-                        fullAiAnalysis = aiReport
+                        fullAiAnalysis = aiReport,
+                        status = code.status
                     )
                 )
                 _isAiLoading.value = false
@@ -357,20 +412,33 @@ class MekanikViewModel(
 
     fun clearTroubleCodesOnEcu() {
         val vehicle = _selectedVehicle.value ?: return
-        obdManager.clearTroubleCodes()
-        _scannedCodes.value = emptyList()
-        _aiAnalysisReport.value = null
-
-        // Add a scan representing "Codes Cleared"
+        
         viewModelScope.launch {
-            val scan = DiagnosticScan(
-                vehicleId = vehicle.id,
-                totalDtcCount = 0,
-                codesFound = "",
-                overview = "ECU reset initiated. Diagnostic trouble memory cleared.",
-                odometerReading = liveSensorData.value.odometer.toInt().takeIf { it > 0 } ?: vehicle.odometer
-            )
-            repository.insertScan(scan)
+            _isScanning.value = true
+            val wasCleared = obdManager.clearTroubleCodes()
+            
+            if (wasCleared) {
+                _scannedCodes.value = emptyList()
+                _aiAnalysisReport.value = null
+
+                // Add a scan representing "Codes Cleared"
+                val scan = DiagnosticScan(
+                    vehicleId = vehicle.id,
+                    totalDtcCount = 0,
+                    codesFound = "",
+                    overview = "ECU reset initiated. Diagnostic trouble memory cleared.",
+                    odometerReading = liveSensorData.value.odometer.toInt().takeIf { it > 0 } ?: vehicle.odometer
+                )
+                repository.insertScan(scan)
+                
+                // Wait a bit for the ECU to process the clear command before re-scanning
+                kotlinx.coroutines.delay(2000)
+                scanVehicleTroubleCodes(useCloudAnalysis = false, isAutoScan = true)
+            } else {
+                Log.e("MekanikVM", "ECU rejected clear command (Mode 04)")
+            }
+            
+            _isScanning.value = false
             refreshVehicleHistory(vehicle.id)
         }
     }
@@ -382,6 +450,25 @@ class MekanikViewModel(
         viewModelScope.launch {
             repository.deleteScan(scan)
             _selectedVehicle.value?.let { refreshVehicleHistory(it.id) }
+        }
+    }
+
+    // PDF Export Service
+    private val pdfExportService = PdfExportService(application)
+
+    fun exportRepairManifesto(scan: DiagnosticScan) {
+        viewModelScope.launch {
+            val vehicle = _selectedVehicle.value ?: return@launch
+            val records = repository.getDtcRecordsForScan(scan.id).first()
+            pdfExportService.exportRepairManifesto(vehicle, scan, records)
+        }
+    }
+
+    fun shareRepairManifesto(scan: DiagnosticScan) {
+        viewModelScope.launch {
+            val vehicle = _selectedVehicle.value ?: return@launch
+            val records = repository.getDtcRecordsForScan(scan.id).first()
+            pdfExportService.shareRepairManifesto(vehicle, scan, records)
         }
     }
 

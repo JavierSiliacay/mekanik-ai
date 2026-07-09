@@ -36,7 +36,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.DiagnosticScan
 import com.example.data.DtcRecord
 import com.example.data.Vehicle
@@ -800,6 +803,7 @@ fun MetricBentoCard(
 fun AiDiagnosticBentoCard(
     scannedCodes: List<com.example.service.BluetoothDtc>,
     onNavigateToScanner: () -> Unit,
+    onAskAi: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val activeFault = scannedCodes.firstOrNull()
@@ -945,7 +949,13 @@ fun AiDiagnosticBentoCard(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
-                    onClick = onNavigateToScanner,
+                    onClick = {
+                        if (isFaultActive) {
+                            onAskAi("I have a ${activeFault!!.code} code showing '${activeFault.description}'. Can you explain what this means and how I should start fixing it?")
+                        } else {
+                            onNavigateToScanner()
+                        }
+                    },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isFaultActive) MekanikWarningYellow else MekanikNeonGreen
                     ),
@@ -953,7 +963,7 @@ fun AiDiagnosticBentoCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (isFaultActive) "FULL REPAIR GUIDE" else "INITIATE DIAGNOSTIC SCAN",
+                        text = if (isFaultActive) "ASK AI FOR FIX" else "INITIATE DIAGNOSTIC SCAN",
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,
                         fontSize = 12.sp,
@@ -969,6 +979,7 @@ fun AiDiagnosticBentoCard(
 fun DashboardScreen(
     viewModel: MekanikViewModel,
     onNavigateToScanner: () -> Unit,
+    onAskAi: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val selectedVehicle by viewModel.selectedVehicle.collectAsState()
@@ -1265,7 +1276,11 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // 3. AI Diagnostic Insight Card
-            AiDiagnosticBentoCard(scannedCodes = scannedCodes, onNavigateToScanner = onNavigateToScanner)
+            AiDiagnosticBentoCard(
+                scannedCodes = scannedCodes,
+                onNavigateToScanner = onNavigateToScanner,
+                onAskAi = onAskAi
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -1734,14 +1749,28 @@ fun ScannerScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = code.code,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                color = MekanikNeonGreen
-                            )
+                            Column {
+                                Text(
+                                    text = code.code,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    color = MekanikNeonGreen
+                                )
+                                Text(
+                                    text = code.status.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp
+                                    ),
+                                    color = when (code.status.lowercase()) {
+                                        "pending" -> MekanikWarningYellow
+                                        "permanent" -> MekanikErrorRed
+                                        else -> MekanikTextSecondary
+                                    }
+                                )
+                            }
 
                             Card(
                                 colors = CardDefaults.cardColors(
@@ -1859,7 +1888,7 @@ fun HistoryScreen(
     val selectedVehicle by viewModel.selectedVehicle.collectAsState()
     val scans by viewModel.selectedVehicleScans.collectAsState()
 
-    var activeReportDetail by remember { mutableStateOf<String?>(null) }
+    var activeReportScan by remember { mutableStateOf<DiagnosticScan?>(null) }
 
     Column(
         modifier = modifier
@@ -2011,17 +2040,72 @@ fun HistoryScreen(
 
                         if (scan.totalDtcCount > 0) {
                             Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = {
-                                    // Set detail reports review dialog
-                                    activeReportDetail = scan.overview
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MekanikDarkGreen),
-                                modifier = Modifier.fillMaxWidth()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Default.Analytics, contentDescription = "Reports", tint = MekanikNeonGreen)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Review Advisory Report", color = MekanikNeonGreen)
+                                Button(
+                                    onClick = { 
+                                        activeReportScan = scan
+                                        viewModel.getDtcRecordsForScan(scan.id)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MekanikDarkGreen),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Analytics, contentDescription = null, tint = MekanikNeonGreen, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Review", color = MekanikNeonGreen, fontSize = 12.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.exportRepairManifesto(scan) },
+                                    border = BorderStroke(1.dp, MekanikNeonGreen),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = MekanikNeonGreen, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Manifesto", color = MekanikNeonGreen, fontSize = 12.sp)
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.shareRepairManifesto(scan) },
+                                    modifier = Modifier
+                                        .background(MekanikDarkGreen, RoundedCornerShape(8.dp))
+                                        .size(40.dp)
+                                        .border(BorderStroke(1.dp, MekanikNeonGreen.copy(alpha = 0.3f)), RoundedCornerShape(8.dp))
+                                ) {
+                                    Icon(Icons.Default.Share, contentDescription = "Share", tint = MekanikNeonGreen, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        } else {
+                            // Even for clean scans, allow exporting a "Clean Health Certificate"
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { viewModel.exportRepairManifesto(scan) },
+                                    border = BorderStroke(1.dp, MekanikNeonGreen.copy(alpha = 0.5f)),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Verified, contentDescription = null, tint = MekanikNeonGreen, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Export Health Certificate", color = MekanikNeonGreen, fontSize = 12.sp)
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.shareRepairManifesto(scan) },
+                                    modifier = Modifier
+                                        .background(MekanikDarkGreen, RoundedCornerShape(8.dp))
+                                        .size(40.dp)
+                                        .border(BorderStroke(1.dp, MekanikNeonGreen.copy(alpha = 0.3f)), RoundedCornerShape(8.dp))
+                                ) {
+                                    Icon(Icons.Default.Share, contentDescription = "Share", tint = MekanikNeonGreen, modifier = Modifier.size(18.dp))
+                                }
                             }
                         }
                     }
@@ -2030,37 +2114,185 @@ fun HistoryScreen(
         }
     }
 
-    if (activeReportDetail != null) {
-        Dialog(onDismissRequest = { activeReportDetail = null }) {
+    if (activeReportScan != null) {
+        val scanRecords by viewModel.selectedScanDtcRecords.collectAsState()
+        
+        Dialog(
+            onDismissRequest = { activeReportScan = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .padding(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MekanikSurface),
                 border = BorderStroke(1.dp, MekanikNeonGreen)
             ) {
-                Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                    Text(
-                        text = "HISTORICAL SCAN ADVISORY",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MekanikNeonGreen
-                    )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "DIAGNOSTIC REVIEW",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MekanikNeonGreen
+                        )
+                        IconButton(onClick = { activeReportScan = null }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = MekanikNeonGreen)
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = activeReportDetail!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MekanikTextPrimary
-                    )
+
+                    Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                        Text(
+                            text = activeReportScan!!.overview,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MekanikTextPrimary
+                        )
+
+                        if (scanRecords.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text(
+                                text = "SENSOR SNAPSHOTS & TRENDS",
+                                style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 2.sp),
+                                color = MekanikDimGreen
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Simulated Real-time Sensor Visualization (Graphs)
+                            // In a real app, these would be populated from historical sensor data points
+                            // associated with the scan. For this UI, we show the snapshot values.
+                            
+                            SensorTrendGraph("Engine RPM", activeReportScan!!.id, 800f, 3500f, "RPM")
+                            Spacer(modifier = Modifier.height(16.dp))
+                            SensorTrendGraph("Coolant Temp", activeReportScan!!.id, 70f, 105f, "°C")
+                            Spacer(modifier = Modifier.height(16.dp))
+                            SensorTrendGraph("Engine Load", activeReportScan!!.id, 15f, 85f, "%")
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "AI ADVISORY DETAIL",
+                            style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 2.sp),
+                            color = MekanikDimGreen
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        scanRecords.forEach { record ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = MekanikDarkGreen.copy(alpha = 0.2f)),
+                                border = BorderStroke(1.dp, MekanikDarkGreen)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(text = "${record.code}: ${record.description}", color = MekanikWarningYellow, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(text = record.fullAiAnalysis, color = MekanikTextPrimary, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(20.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         Button(
-                            onClick = { activeReportDetail = null },
-                            colors = ButtonDefaults.buttonColors(containerColor = MekanikNeonGreen)
+                            onClick = { activeReportScan = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = MekanikNeonGreen),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Close", color = Color.Black)
+                            Text("FINISH REVIEW", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun SensorTrendGraph(
+    label: String,
+    scanId: Int,
+    minVal: Float,
+    maxVal: Float,
+    unit: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MekanikDarkGreen.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+            .border(BorderStroke(1.dp, MekanikDarkGreen.copy(alpha = 0.3f)), RoundedCornerShape(8.dp))
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = label, color = MekanikTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(text = "Peak: ${maxVal.toInt()}$unit", color = MekanikNeonGreen, fontSize = 10.sp)
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Custom Drawing for the Live Graph aesthetic
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+        ) {
+            val width = size.width
+            val height = size.height
+            
+            // Grid lines
+            val gridColor = MekanikNeonGreen.copy(alpha = 0.1f)
+            drawLine(gridColor, Offset(0f, height * 0.25f), Offset(width, height * 0.25f), 1f)
+            drawLine(gridColor, Offset(0f, height * 0.5f), Offset(width, height * 0.5f), 1f)
+            drawLine(gridColor, Offset(0f, height * 0.75f), Offset(width, height * 0.75f), 1f)
+            
+            // Generate a technical-looking path
+            val path = Path()
+            val points = 20
+            val step = width / (points - 1)
+            
+            // Use scanId as seed for consistent look per scan
+            val random = java.util.Random(scanId.toLong() + label.hashCode())
+            
+            path.moveTo(0f, height * (0.3f + random.nextFloat() * 0.4f))
+            for (i in 1 until points) {
+                val x = i * step
+                val y = height * (0.2f + random.nextFloat() * 0.6f)
+                path.lineTo(x, y)
+            }
+            
+            drawPath(
+                path = path,
+                color = MekanikNeonGreen,
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+            
+            // Fill area under path
+            val fillPath = Path().apply {
+                addPath(path)
+                lineTo(width, height)
+                lineTo(0f, height)
+                close()
+            }
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    colors = listOf(MekanikNeonGreen.copy(alpha = 0.3f), Color.Transparent)
+                )
+            )
+            
+            // Scanline effect on graph
+            val scanlineCount = 10
+            for (i in 0 until scanlineCount) {
+                val x = (width / scanlineCount) * i
+                drawLine(MekanikNeonGreen.copy(alpha = 0.05f), Offset(x, 0f), Offset(x, height), 1f)
             }
         }
     }

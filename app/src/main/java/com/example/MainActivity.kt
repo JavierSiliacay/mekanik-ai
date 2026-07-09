@@ -25,7 +25,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WifiOff
 import com.example.service.AiMode
 import com.example.service.DownloadState
+import com.example.ui.screens.DiagnosticLoadingScreen
 import com.example.ui.screens.AiSettingsDialog
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -120,26 +122,31 @@ class MainActivity : ComponentActivity() {
         // Jetpack Compose MVVM View Model
         val viewModel: MekanikViewModel = ViewModelProvider(this, viewModelFactory)[MekanikViewModel::class.java]
 
-        // Keep the splash screen on-screen until the ViewModel is initialized
-        splashScreen.setKeepOnScreenCondition {
-            !viewModel.isInitialized.value
-        }
+        // The system splash screen exits as soon as the app process is ready.
+        // We will show our custom Animated Diagnostic screen in Compose for the "heavy" init.
+        splashScreen.setKeepOnScreenCondition { false }
 
         setContent {
-            MekanikAITheme {
-                // Use the already initialized viewModel
-                val chatViewModel: AutomotiveChatViewModel = viewModel(
-                    factory = AutomotiveChatViewModel.Companion.Factory(
-                        application,
-                        viewModel.aiProviderManager
-                    )
-                )
+            val isInitialized by viewModel.isInitialized.collectAsState()
 
-                Box(modifier = Modifier.fillMaxSize()) {
-                    MekanikAppShell(viewModel)
-                    
-                    // Floating AI Widget on top of everything
-                    AutomotiveChatWidget(chatViewModel)
+            MekanikAITheme {
+                if (!isInitialized) {
+                    DiagnosticLoadingScreen()
+                } else {
+                    // Use the already initialized viewModel
+                    val chatViewModel: AutomotiveChatViewModel = viewModel(
+                        factory = AutomotiveChatViewModel.Companion.Factory(
+                            application,
+                            viewModel.aiProviderManager
+                        )
+                    )
+
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        MekanikAppShell(viewModel, chatViewModel)
+
+                        // Floating AI Widget on top of everything
+                        AutomotiveChatWidget(chatViewModel)
+                    }
                 }
             }
         }
@@ -193,7 +200,7 @@ fun ScanAiIcon(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun MekanikAppShell(viewModel: MekanikViewModel) {
+fun MekanikAppShell(viewModel: MekanikViewModel, chatViewModel: AutomotiveChatViewModel) {
     var activeTab by remember { mutableStateOf(MekanikTab.GARAGE) }
     var showConnectionPromptDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -286,6 +293,7 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
                         MekanikScreenContent(
                             activeTab = activeTab,
                             viewModel = viewModel,
+                            chatViewModel = chatViewModel,
                             onNavigateToDashboard = { activeTab = MekanikTab.DASHBOARD },
                             onNavigateToScanner = { activeTab = MekanikTab.SCANNER },
                             modifier = Modifier.padding(innerPadding)
@@ -448,13 +456,14 @@ fun MekanikAppShell(viewModel: MekanikViewModel) {
                 containerColor = MekanikDarkBg,
                 contentWindowInsets = WindowInsets.safeDrawing
             ) { innerPadding ->
-                MekanikScreenContent(
-                    activeTab = activeTab,
-                    viewModel = viewModel,
-                    onNavigateToDashboard = { activeTab = MekanikTab.DASHBOARD },
-                    onNavigateToScanner = { activeTab = MekanikTab.SCANNER },
-                    modifier = Modifier.padding(innerPadding)
-                )
+                        MekanikScreenContent(
+                            activeTab = activeTab,
+                            viewModel = viewModel,
+                            chatViewModel = chatViewModel,
+                            onNavigateToDashboard = { activeTab = MekanikTab.DASHBOARD },
+                            onNavigateToScanner = { activeTab = MekanikTab.SCANNER },
+                            modifier = Modifier.padding(innerPadding)
+                        )
             }
         }
 
@@ -715,6 +724,7 @@ fun MekanikTopHeaderBanner(
 fun MekanikScreenContent(
     activeTab: MekanikTab,
     viewModel: MekanikViewModel,
+    chatViewModel: AutomotiveChatViewModel,
     onNavigateToDashboard: () -> Unit,
     onNavigateToScanner: () -> Unit,
     modifier: Modifier = Modifier
@@ -724,7 +734,8 @@ fun MekanikScreenContent(
             MekanikTab.GARAGE -> VehicleScreen(viewModel, onNavigateToDashboard)
             MekanikTab.DASHBOARD -> DashboardScreen(
                 viewModel,
-                onNavigateToScanner = onNavigateToScanner
+                onNavigateToScanner = onNavigateToScanner,
+                onAskAi = { chatViewModel.openChatWithContext(it) }
             )
             MekanikTab.SCANNER -> ScannerScreen(viewModel)
             MekanikTab.HISTORY -> HistoryScreen(viewModel)

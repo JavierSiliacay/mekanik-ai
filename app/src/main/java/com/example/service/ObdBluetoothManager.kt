@@ -47,7 +47,8 @@ data class BluetoothDtc(
     val description: String,
     val severity: String,
     val causes: List<String>,
-    val recommendations: List<String>
+    val recommendations: List<String>,
+    val status: String = "Stored" // e.g., "Stored", "Pending", "Permanent"
 )
 
 data class PidConfig(
@@ -147,6 +148,20 @@ class ObdBluetoothManager(private val context: Context) {
             severity = "Low",
             causes = listOf("Defective IAT sensor", "Sensor unplugged or open circuit wiring", "Incorrect/dirty filter installation"),
             recommendations = listOf("Check if the IAT / MAF harness is securely plugged in.", "Inspect IAT sensor values (e.g. showing unrealistic -40C).", "Clean sensor element safely.")
+        ),
+        "P0138" to BluetoothDtc(
+            code = "P0138",
+            description = "O2 Sensor Circuit High Voltage Bank 1 Sensor 2",
+            severity = "High",
+            causes = listOf("Faulty O2 sensor", "Short to voltage in wiring", "Rich fuel condition", "PCM failure"),
+            recommendations = listOf("Inspect O2 sensor wiring for damage.", "Check fuel pressure and injectors.", "Replace Bank 1 Sensor 2 O2 sensor.")
+        ),
+        "P0443" to BluetoothDtc(
+            code = "P0443",
+            description = "Evaporative Emission System Purge Control Valve Circuit",
+            severity = "Medium",
+            causes = listOf("Faulty purge valve", "Wiring harness issue", "PCM fault"),
+            recommendations = listOf("Check purge valve resistance.", "Inspect wiring to the purge solenoid.", "Replace EVAP purge valve.")
         )
     )
 
@@ -449,59 +464,97 @@ class ObdBluetoothManager(private val context: Context) {
     }
 
     /**
-     * Returns list of currently intercepted DTCs
+     * Returns list of currently intercepted DTCs using Triple-Mode Deep Scan (Stored, Pending, Permanent)
      */
     suspend fun getActiveTroubleCodes(): List<BluetoothDtc> {
         return withContext(Dispatchers.IO) {
             if (_connectionStatus.value == ConnectionStatus.CONNECTED) {
                 try {
-                    val response = sendCommand("03") ?: "" // Mode 03: Request trouble codes
-                    // response is usually like "43 01 33 00 00 00 00" or similar.
-                    // Simplified parsing for ELM327:
-                    val codes = parseDtcResponse(response)
+                    val allFoundCodes = mutableMapOf<String, String>() // Code to Status mapping
+                    // Mode 03: Stored, Mode 07: Pending, Mode 0A: Permanent
+                    val modes = mapOf(
+                        "03" to "Stored",
+                        "07" to "Pending",
+                        "0A" to "Permanent"
+                    )
+                    val modeHeaders = mapOf(
+                        "03" to "43",
+                        "07" to "47",
+                        "0A" to "4A"
+                    )
+
+                    for ((mode, status) in modes) {
+                        val header = modeHeaders[mode] ?: continue
+                        val response = sendCommand(mode) ?: ""
+                        val codes = parseDtcResponse(response, header)
+                        codes.forEach { code ->
+                            // Prefer "Stored" or "Permanent" over "Pending" if multiple modes return same code
+                            if (!allFoundCodes.containsKey(code) || status != "Pending") {
+                                allFoundCodes[code] = status
+                            }
+                        }
+                    }
+
                     activeCodes.clear()
-                    activeCodes.addAll(codes)
+                    activeCodes.addAll(allFoundCodes.keys)
+                    
+                    return@withContext allFoundCodes.map { (code, status) ->
+                        val baseDtc = dtcDictionary[code] ?: BluetoothDtc(
+                            code = code,
+                            description = "Generic OBD-II Fault Code",
+                            severity = "Medium",
+                            causes = listOf("Consult vehicle service manual for specific details."),
+                            recommendations = listOf("Perform a full diagnostic scan and check related sensor telemetry.")
+                        )
+                        baseDtc.copy(status = status)
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to fetch DTCs: ${e.message}")
                 }
             }
-            activeCodes.mapNotNull { dtcDictionary[it] }
+            emptyList()
         }
     }
 
     /**
      * Sends Mode 04 command to clear diagnostic trouble codes and reset MIL.
      */
-    fun clearTroubleCodes() {
-        scope.launch {
+    suspend fun clearTroubleCodes(): Boolean {
+        return withContext(Dispatchers.IO) {
             Log.d(TAG, "Attempting to clear DTCs (Mode 04)")
-            // Mode 04 clears stored codes, freeze frame data, and oxygen sensor results
-            sendCommand("04")
+            val response = sendCommand("04")
+            // A successful clear usually returns "44" or "OK"
+            response != null && (response.contains("44") || response.contains("OK"))
         }
     }
 
-    private fun parseDtcResponse(response: String): List<String> {
+    private fun parseDtcResponse(response: String, header: String): List<String> {
         // Remove spaces, newlines and ELM327 CAN multi-frame line identifiers (e.g. 0: or 1:)
         val cleaned = response.replace(" ", "")
             .replace("\r", "")
             .replace("\n", "")
             .replace(Regex("\\d:"), "")
 
-        // Mode 03 response starts with 43. Each DTC is 2 bytes (4 hex chars).
-        if (cleaned.contains("43")) {
-            val data = cleaned.substringAfter("43")
+        if (cleaned.contains(header)) {
+            var data = cleaned.substringAfter(header)
+            
+            // Handle count bytes if present (common in CAN)
+            if (data.length % 4 != 0 && data.length >= 2) {
+                data = data.substring(2)
+            }
+
             val codes = mutableListOf<String>()
             for (i in 0 until data.length - 3 step 4) {
                 val hex = data.substring(i, i + 4)
-                if (hex == "0000") continue
+                if (hex == "0000" || hex == "4300" || hex == "4700" || hex == "4A00") continue
                 
-                // Advanced decoding from Circuito AI bitwise logic
                 try {
                     val b1 = hex.substring(0, 2).toInt(16)
                     val b2 = hex.substring(2, 4)
                     
                     val prefixes = arrayOf("P", "C", "B", "U")
-                    val prefix = prefixes[(b1 and 0xC0) shr 6]
+                    val prefixIdx = (b1 and 0xC0) shr 6
+                    val prefix = prefixes[prefixIdx]
                     val d1 = (b1 and 0x30) shr 4
                     val d2 = b1 and 0x0F
                     
