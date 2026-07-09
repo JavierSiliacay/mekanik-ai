@@ -9,6 +9,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.animation.doOnEnd
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.BorderStroke
@@ -63,7 +67,7 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (!allGranted) {
-            // Handle permission denial - maybe show a snackbar or a dialog
+            android.util.Log.w("MainActivity", "Permissions not all granted")
         }
     }
 
@@ -167,7 +171,7 @@ fun ScanAiIcon(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         // Draw the camera/scanner viewfinder brackets around the AI Spark
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val strokeWidth = 2.dp.toPx()
             val length = 6.dp.toPx()
             val color = Color.Black
@@ -216,102 +220,136 @@ fun MekanikAppShell(viewModel: MekanikViewModel, chatViewModel: AutomotiveChatVi
     val aiNetworkWarning by viewModel.aiNetworkWarning.collectAsState()
     val offlineModels by viewModel.offlineModels.collectAsState()
 
+    val chatOpen by chatViewModel.isChatOpen.collectAsState()
+    val density = LocalDensity.current
+
+    // Neural Transition Overlay Effect when Chat opens
+    val neuralTransitionAlpha by animateFloatAsState(
+        targetValue = if (chatOpen) 1f else 0f,
+        animationSpec = tween(600, easing = FastOutSlowInEasing),
+        label = "neural_bridge_transition"
+    )
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MekanikDarkBg
     ) {
-        if (isTablet) {
-            // TABLET / FOLDABLE Layout: Persistent Ergonomic Side Navigation Rail
-            Row(modifier = Modifier.fillMaxSize()) {
-                NavigationRail(
-                    containerColor = MekanikSurface,
-                    contentColor = MekanikNeonGreen,
-                    header = {
-                        Column(
-                            modifier = Modifier.padding(12.dp)
-                        ) {
-                            Text(
-                                "MK",
-                                color = MekanikNeonGreen,
-                                fontWeight = FontWeight.Black,
-                                style = MaterialTheme.typography.headlineMedium
-                            )
-                            Spacer(modifier = Modifier.height(30.dp))
-                        }
-                    },
-                    modifier = Modifier.testTag("tablet_nav_rail")
-                ) {
-                    MekanikTab.entries.forEach { tab ->
-                        val isTabSelected = activeTab == tab
-                        NavigationRailItem(
-                            selected = isTabSelected,
-                            onClick = { activeTab = tab },
-                            icon = {
-                                Icon(
-                                    imageVector = tab.icon,
-                                    contentDescription = tab.label
-                                )
-                            },
-                            label = { Text(tab.label) },
-                            colors = NavigationRailItemDefaults.colors(
-                                selectedIconColor = Color.Black,
-                                selectedTextColor = MekanikNeonGreen,
-                                indicatorColor = MekanikNeonGreen,
-                                unselectedIconColor = MekanikTextSecondary,
-                                unselectedTextColor = MekanikTextSecondary
-                            ),
-                            modifier = Modifier.testTag("rail_item_${tab.name.lowercase()}")
-                        )
-                    }
-                }
-
-                VerticalDivider(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(1.dp),
-                    color = MekanikDarkGreen
-                )
-
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (neuralTransitionAlpha > 0f) {
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .background(MekanikDarkBg)
+                        .fillMaxSize()
+                        .zIndex(50f)
+                        .background(Color.Black.copy(alpha = neuralTransitionAlpha * 0.4f))
                 ) {
-                    Scaffold(
-                        topBar = {
-                            MekanikTopHeaderBanner(
-                                selectedVehicle = selectedVehicle,
-                                connStatus = connStatus,
-                                batteryAlert = batteryAlert,
-                                onSettingsClick = { showSettingsDialog = true }
-                            )
-                        },
-                        containerColor = MekanikDarkBg,
-                        contentWindowInsets = WindowInsets.safeDrawing
-                    ) { innerPadding ->
-                        MekanikScreenContent(
-                            activeTab = activeTab,
-                            viewModel = viewModel,
-                            chatViewModel = chatViewModel,
-                            onNavigateToDashboard = { activeTab = MekanikTab.DASHBOARD },
-                            onNavigateToScanner = { activeTab = MekanikTab.SCANNER },
-                            modifier = Modifier.padding(innerPadding)
-                        )
+                    // Holographic scanline bridge effect
+                    Canvas(modifier = Modifier.fillMaxSize().alpha(neuralTransitionAlpha * 0.2f)) {
+                        val gridColor = MekanikNeonGreen
+                        val step = with(density) { 40.dp.toPx() }
+                        val width = size.width
+                        val height = size.height
+                        for (x in 0..width.toInt() step step.toInt()) {
+                            drawLine(gridColor, Offset(x.toFloat(), 0f), Offset(x.toFloat(), height), 1f)
+                        }
+                        for (y in 0..height.toInt() step step.toInt()) {
+                            drawLine(gridColor, Offset(0f, y.toFloat()), Offset(width, y.toFloat()), 1f)
+                        }
                     }
                 }
             }
-        } else {
-            // MOBILE Layout: Bottom Navigation Bar with safe window drawing insets
-            Scaffold(
-                topBar = {
-                    MekanikTopHeaderBanner(
-                        selectedVehicle = selectedVehicle,
-                        connStatus = connStatus,
-                        batteryAlert = batteryAlert,
-                        onSettingsClick = { showSettingsDialog = true }
+
+            if (isTablet) {
+                // TABLET / FOLDABLE Layout: Persistent Ergonomic Side Navigation Rail
+                Row(modifier = Modifier.fillMaxSize()) {
+                    NavigationRail(
+                        containerColor = MekanikSurface,
+                        contentColor = MekanikNeonGreen,
+                        header = {
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Text(
+                                    "MK",
+                                    color = MekanikNeonGreen,
+                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.headlineMedium
+                                )
+                                Spacer(modifier = Modifier.height(30.dp))
+                            }
+                        },
+                        modifier = Modifier.testTag("tablet_nav_rail")
+                    ) {
+                        MekanikTab.entries.forEach { tab ->
+                            val isTabSelected = activeTab == tab
+                            NavigationRailItem(
+                                selected = isTabSelected,
+                                onClick = { activeTab = tab },
+                                icon = {
+                                    Icon(
+                                        imageVector = tab.icon,
+                                        contentDescription = tab.label
+                                    )
+                                },
+                                label = { Text(tab.label) },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = Color.Black,
+                                    selectedTextColor = MekanikNeonGreen,
+                                    indicatorColor = MekanikNeonGreen,
+                                    unselectedIconColor = MekanikTextSecondary,
+                                    unselectedTextColor = MekanikTextSecondary
+                                ),
+                                modifier = Modifier.testTag("rail_item_${tab.name.lowercase()}")
+                            )
+                        }
+                    }
+
+                    VerticalDivider(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(1.dp),
+                        color = MekanikDarkGreen
                     )
-                },
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .background(MekanikDarkBg)
+                    ) {
+                        Scaffold(
+                            topBar = {
+                                MekanikTopHeaderBanner(
+                                    selectedVehicle = selectedVehicle,
+                                    connStatus = connStatus,
+                                    batteryAlert = batteryAlert,
+                                    onSettingsClick = { showSettingsDialog = true }
+                                )
+                            },
+                            containerColor = MekanikDarkBg,
+                            contentWindowInsets = WindowInsets.safeDrawing
+                        ) { innerPadding ->
+                            MekanikScreenContent(
+                                activeTab = activeTab,
+                                viewModel = viewModel,
+                                chatViewModel = chatViewModel,
+                                onNavigateToDashboard = { activeTab = MekanikTab.DASHBOARD },
+                                onNavigateToScanner = { activeTab = MekanikTab.SCANNER },
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
+                    }
+                }
+            } else {
+                // MOBILE Layout: Bottom Navigation Bar with safe window drawing insets
+                Scaffold(
+                    topBar = {
+                        MekanikTopHeaderBanner(
+                            selectedVehicle = selectedVehicle,
+                            connStatus = connStatus,
+                            batteryAlert = batteryAlert,
+                            onSettingsClick = { showSettingsDialog = true }
+                        )
+                    },
                 bottomBar = {
                     Box(
                         modifier = Modifier
@@ -464,6 +502,7 @@ fun MekanikAppShell(viewModel: MekanikViewModel, chatViewModel: AutomotiveChatVi
                             onNavigateToScanner = { activeTab = MekanikTab.SCANNER },
                             modifier = Modifier.padding(innerPadding)
                         )
+                    }
             }
         }
 

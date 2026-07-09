@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Path
@@ -1260,15 +1261,15 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 MetricBentoCard(
-                    label = "Intake Pressure",
-                    value = liveData.intakeManifoldPressure.format(0),
-                    unit = "kPa",
-                    modifier = Modifier.weight(1f)
-                )
-                MetricBentoCard(
                     label = "Timing Advance",
                     value = liveData.timingAdvance.format(1),
                     unit = "°",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricBentoCard(
+                    label = "Odometer",
+                    value = String.format(Locale.US, "%,.0f", liveData.odometer),
+                    unit = "km",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1284,81 +1285,44 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 4. Real-time Oscilloscope Flow Chart scaled in Bento card
-            Card(
+            // 4. Real-time Oscilloscope Flow Charts scaled in Bento cards
+            Text(
+                text = "Live Telemetry Waveforms",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                ),
+                color = MekanikTextSecondary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            DashboardOscilloscopeCard(
+                label = "RPM OSCILLOSCOPE",
+                value = liveData.rpm,
+                maxValue = 8000f,
+                color = MekanikNeonGreen
+            )
+
+            Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                colors = CardDefaults.cardColors(containerColor = MekanikSurface),
-                shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "REAL-TIME OSCILLOSCOPE FLOW (RPM wave)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MekanikTextSecondary
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Simulated realtime wave plotting based on current RPM
-                    val wavePoints = remember { mutableStateListOf<Float>() }
-                    LaunchedEffect(liveData.rpm) {
-                        wavePoints.add(liveData.rpm)
-                        if (wavePoints.size > 20) {
-                            wavePoints.removeAt(0)
-                        }
-                    }
-
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp)
-                    ) {
-                        // Background Grid
-                        val gridSpace = size.width / 5
-                        for (i in 1..4) {
-                            drawLine(
-                                color = MekanikDarkGreen.copy(alpha = 0.2f),
-                                start = Offset(i * gridSpace, 0f),
-                                end = Offset(i * gridSpace, size.height),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        }
-                        val horizSpace = size.height / 4
-                        for (i in 1..3) {
-                            drawLine(
-                                color = MekanikDarkGreen.copy(alpha = 0.2f),
-                                start = Offset(0f, i * horizSpace),
-                                end = Offset(size.width, i * horizSpace),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        }
-
-                        // Plot RPM Line
-                        if (wavePoints.size > 1) {
-                            val step = size.width / 19f
-                            var lastX = 0f
-                            var lastY = size.height
-
-                            wavePoints.forEachIndexed { index, rpmVal ->
-                                val pct = (rpmVal / 8000f).coerceIn(0f, 1f)
-                                val x = index * step
-                                val y = size.height - (pct * size.height)
-
-                                drawLine(
-                                    color = MekanikNeonGreen,
-                                    start = Offset(lastX, lastY),
-                                    end = Offset(x, y),
-                                    strokeWidth = 3.dp.toPx(),
-                                    cap = StrokeCap.Round
-                                )
-
-                                lastX = x
-                                lastY = y
-                            }
-                        }
-                    }
-                }
+                DashboardOscilloscopeCard(
+                    label = "ENGINE LOAD %",
+                    value = liveData.engineLoad,
+                    maxValue = 100f,
+                    color = MekanikWarningYellow,
+                    modifier = Modifier.weight(1f),
+                    height = 80.dp
+                )
+                DashboardOscilloscopeCard(
+                    label = "THROTTLE %",
+                    value = liveData.throttlePosition,
+                    maxValue = 100f,
+                    color = MekanikInfoBlue,
+                    modifier = Modifier.weight(1f),
+                    height = 80.dp
+                )
             }
         }
     }
@@ -2206,6 +2170,104 @@ fun HistoryScreen(
                             Text("FINISH REVIEW", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DashboardOscilloscopeCard(
+    label: String,
+    value: Float,
+    maxValue: Float,
+    color: Color,
+    modifier: Modifier = Modifier,
+    height: Dp = 100.dp
+) {
+    Card(
+        modifier = modifier.padding(bottom = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = MekanikSurface),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = MekanikTextSecondary
+                )
+                Text(
+                    text = value.format(if (maxValue > 100) 0 else 1),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = color
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val wavePoints = remember { mutableStateListOf<Float>() }
+            LaunchedEffect(value) {
+                wavePoints.add(value)
+                if (wavePoints.size > 20) {
+                    wavePoints.removeAt(0)
+                }
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(height)
+            ) {
+                val gridColor = MekanikDarkGreen.copy(alpha = 0.2f)
+                val gridStepX = size.width / 5
+                for (i in 1..4) {
+                    drawLine(gridColor, Offset(i * gridStepX, 0f), Offset(i * gridStepX, size.height), 1f)
+                }
+                val gridStepY = size.height / 4
+                for (i in 1..3) {
+                    drawLine(gridColor, Offset(0f, i * gridStepY), Offset(size.width, i * gridStepY), 1f)
+                }
+
+                if (wavePoints.size > 1) {
+                    val step = size.width / 19f
+                    val path = Path()
+                    
+                    wavePoints.forEachIndexed { index, valAtPoint ->
+                        val pct = (valAtPoint / maxValue).coerceIn(0f, 1f)
+                        val x = index * step
+                        val y = size.height - (pct * size.height)
+                        
+                        if (index == 0) {
+                            path.moveTo(x, y)
+                        } else {
+                            path.lineTo(x, y)
+                        }
+                    }
+
+                    drawPath(
+                        path = path,
+                        color = color,
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    )
+                    
+                    val fillPath = Path().apply {
+                        addPath(path)
+                        lineTo((wavePoints.size - 1) * step, size.height)
+                        lineTo(0f, size.height)
+                        close()
+                    }
+                    drawPath(
+                        path = fillPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(color.copy(alpha = 0.2f), Color.Transparent)
+                        )
+                    )
                 }
             }
         }
