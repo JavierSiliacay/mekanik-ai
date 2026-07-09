@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.AppDatabase
 import com.example.data.MekanikRepository
 import com.example.ui.MekanikViewModel
+import com.example.ui.AutomotiveChatViewModel
 import com.example.ui.theme.MekanikAITheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -39,10 +40,11 @@ class ExampleRobolectricTest {
         dtcRecordDao = database.dtcRecordDao()
     )
     val viewModel = MekanikViewModel(application, repository)
+    val chatViewModel = AutomotiveChatViewModel(application, viewModel.aiProviderManager)
 
     composeTestRule.setContent {
       MekanikAITheme {
-        MekanikAppShell(viewModel)
+        MekanikAppShell(viewModel, chatViewModel)
       }
     }
     composeTestRule.waitForIdle()
